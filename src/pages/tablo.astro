@@ -17,7 +17,7 @@ const env = Astro.locals.runtime?.env;
 if (!user || !env?.DB) return Astro.redirect('/vhod/', 303);
 
 const period = normalizePeriod(Astro.url.searchParams.get('period'));
-const data = await loadDashboard(env.DB, user.id, period);
+const data = await loadDashboard(env, env.DB, user.id, period);
 const googleStatus = Astro.url.searchParams.get('google');
 
 const GOOGLE_MESSAGES: Record<string, string> = {
@@ -302,6 +302,25 @@ const auditAt = data.audit
           Няма отворени задачи. Ботът ги създава сам, когато открие нещо конкретно за оправяне.
         </p>
       )}
+    </section>
+
+    <hr class="rule" />
+
+    <section id="modeli">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px">
+        <h2 style={H2}>Двигатели</h2>
+        <button type="button" class="btn btn-ghost" data-check-models style="font-size: 13.5px">Провери моделите</button>
+      </div>
+      <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 0 0 20px">
+        Видимостта се мери по {data.configuredEngines} настроени двигателя — различни модели, а не един
+        модел с няколко етикета. Каталогът на Cloudflare се мени, затова проверката казва кои от тях
+        наистина отговарят днес.
+      </p>
+      <div data-models style="border-top: 2px solid var(--color-text); padding-top: 20px">
+        <p style="font-size: 14px; color: var(--color-neutral-700); margin: 0">
+          Натисни „Провери моделите“ — струва по едно кратко извикване на модел.
+        </p>
+      </div>
     </section>
 
     <hr class="rule" />

@@ -107,6 +107,88 @@ document.querySelectorAll<HTMLButtonElement>('[data-done]').forEach((button) => 
   });
 });
 
+/* ── Двигатели ──────────────────────────────────────────────────── */
+
+/** Данните идват от нашия API, но минават през `innerHTML` — екранираме ги. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char,
+  );
+}
+
+
+interface EngineHealth {
+  id: string;
+  label: string;
+  provider: string;
+  model?: string;
+  ok: boolean;
+  ms: number;
+  error?: string;
+}
+
+interface ModelsResponse {
+  ok?: boolean;
+  error?: string;
+  chat?: { model: string; ok: boolean; ms: number; error?: string; role: string };
+  fast?: { model: string; ok: boolean; ms: number; error?: string; role: string };
+  engines?: EngineHealth[];
+  working?: number;
+  configured?: number;
+  hint?: string;
+}
+
+const modelsBox = document.querySelector<HTMLElement>('[data-models]');
+
+function row(label: string, detail: string, ok: boolean, ms: number, error?: string): string {
+  return `
+    <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px 24px; align-items: baseline;
+                padding: 12px 0; border-bottom: 1px solid var(--color-neutral-300)">
+      <div>
+        <p style="font-weight: 600; font-size: 15px; margin: 0 0 2px">${escapeHtml(label)}</p>
+        <p style="font-size: 12.5px; color: var(--color-neutral-700); margin: 0; font-family: ui-monospace, monospace">
+          ${escapeHtml(detail)}</p>
+        ${error ? `<p style="font-size: 12.5px; color: var(--color-accent-700); margin: 4px 0 0">${escapeHtml(error)}</p>` : ''}
+      </div>
+      <span class="${ok ? 'tag tag-accent' : 'tag tag-outline'}">${ok ? 'отговаря' : 'не отговаря'}</span>
+      <span class="num" style="font-size: 13px; color: var(--color-neutral-700); white-space: nowrap">${ms} ms</span>
+    </div>`;
+}
+
+document.querySelector<HTMLButtonElement>('[data-check-models]')?.addEventListener('click', async (event) => {
+  const button = event.currentTarget as HTMLButtonElement;
+  if (!modelsBox) return;
+
+  button.disabled = true;
+  const label = button.textContent ?? '';
+  button.textContent = 'Проверявам…';
+  modelsBox.innerHTML = '<p style="font-size: 14px; color: var(--color-neutral-700); margin: 0">Питам всеки модел…</p>';
+
+  let data: ModelsResponse | null = null;
+  try {
+    data = (await (await fetch('/api/models')).json()) as ModelsResponse;
+  } catch {
+    modelsBox.innerHTML = '<p class="notice" style="margin: 0">Проверката не мина. Опитай отново.</p>';
+  }
+
+  button.disabled = false;
+  button.textContent = label;
+  if (!data) return;
+
+  if (!data.ok) {
+    modelsBox.innerHTML = `<p class="notice" style="margin: 0">${escapeHtml(data.error ?? 'Проверката не мина.')}</p>`;
+    return;
+  }
+
+  const engines = data.engines ?? [];
+  modelsBox.innerHTML =
+    (data.chat ? row(`Чат — ${data.chat.role}`, data.chat.model, data.chat.ok, data.chat.ms, data.chat.error) : '') +
+    (data.fast ? row(`Бърз — ${data.fast.role}`, data.fast.model, data.fast.ok, data.fast.ms, data.fast.error) : '') +
+    engines.map((engine) => row(engine.label, engine.model ?? engine.provider, engine.ok, engine.ms, engine.error)).join('') +
+    `<p style="font-size: 13.5px; line-height: 1.7; color: ${data.working === data.configured ? 'var(--color-neutral-700)' : 'var(--color-accent-700)'}; margin: 16px 0 0">
+       ${data.working}/${data.configured} двигателя отговарят. ${escapeHtml(data.hint ?? '')}</p>`;
+});
+
 /* ── Google ─────────────────────────────────────────────────────── */
 
 interface GoogleStatus {
@@ -120,12 +202,6 @@ interface GoogleStatus {
 }
 
 const googleBox = document.querySelector<HTMLElement>('[data-google]');
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char,
-  );
-}
 
 async function renderGoogle(): Promise<void> {
   if (!googleBox) return;

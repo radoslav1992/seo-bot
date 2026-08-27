@@ -5,59 +5,146 @@
  * бранш, той ли излиза. Мерим го буквално — задаваме въпроса, четем отговора
  * и търсим в него домейна и името на бранда.
  *
- * Двигателите са НАИСТИНА различни доставчици, а не един модел с четири
- * етикета. Cloudflare Workers AI работи винаги (сметката е на акаунта);
- * ChatGPT, Perplexity и Gemini се включват, когато операторът сложи
- * съответния ключ. Двигател без ключ се показва като „не е свързан“, а не се
- * подменя мълчаливо с друг модел — иначе таблото показва число, което не
- * значи това, което пише над него.
+ * Двигателите са РАЗЛИЧНИ МОДЕЛИ, а не един модел с няколко етикета.
+ * Cloudflare хоства модели на Meta, Google, Mistral, Qwen, DeepSeek, OpenAI
+ * (отворените) и други — те се извикват през `env.AI` без ключ и са гръбнакът
+ * на проверката. Външните двигатели (живите ChatGPT, Perplexity, Gemini) са
+ * по избор и се включват със свой ключ.
+ *
+ * Ключово: двигател, чийто модел не отговаря, се ОТЧИТА КАТО ГРЕШКА, а не
+ * като „брандът не е споменат“. Разликата е между „питахме и не те намериха“
+ * и „не сме питали“ — и само първото е измерване.
  */
 
 import { fastModel, parseJsonFromModel, runChat, type ChatMessage } from './ai';
 
-export type EngineId = 'workers-ai' | 'chatgpt' | 'perplexity' | 'gemini';
+/** Идентификаторът е низ, а не изброен тип: списъкът идва от конфигурацията. */
+export type EngineId = string;
 
 export interface EngineInfo {
   id: EngineId;
   label: string;
-  /** Кой секрет включва двигателя. `null` за вградения. */
-  secret: string | null;
+  /** `workers-ai` вика модел през binding-а; останалите са външни API-та. */
+  provider: 'workers-ai' | 'openai' | 'perplexity' | 'gemini';
+  /** Само за `workers-ai`: точният идентификатор на модела. */
+  model?: string;
+  /** Само за външните: кой секрет ги включва. */
+  secret?: string;
   note: string;
 }
 
-export const ENGINES: EngineInfo[] = [
+/**
+ * Двигателите по подразбиране.
+ *
+ * Каталогът на Workers AI се мени бързо — модели идват и си отиват. Затова
+ * този списък е НАЧАЛНА СТОЙНОСТ, а не истина в кода: `VISIBILITY_ENGINES` в
+ * `wrangler.jsonc` го замества изцяло, а `/api/models` казва кои от
+ * настроените наистина отговарят. Смяната на модел е един ред конфигурация,
+ * не деплой на нов код.
+ *
+ * Виж docs/models.md за това как се проверява актуалният каталог.
+ */
+export const DEFAULT_ENGINES: EngineInfo[] = [
   {
-    id: 'workers-ai',
-    label: 'Cloudflare Workers AI',
-    secret: null,
-    note: 'Вграден. Работи без външен ключ и е базовата ти мярка.',
+    id: 'llama',
+    label: 'Llama (Meta)',
+    provider: 'workers-ai',
+    model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    note: 'Основният модел. Той отговаря и в чата.',
+  },
+  {
+    id: 'gpt-oss',
+    label: 'GPT-OSS (OpenAI)',
+    provider: 'workers-ai',
+    model: '@cf/openai/gpt-oss-120b',
+    note: 'Отворените тегла на OpenAI, хостнати от Cloudflare.',
+  },
+  {
+    id: 'gemma',
+    label: 'Gemma (Google)',
+    provider: 'workers-ai',
+    model: '@cf/google/gemma-3-12b-it',
+    note: 'Моделът на Google върху Workers AI.',
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral',
+    provider: 'workers-ai',
+    model: '@cf/mistralai/mistral-small-3.1-24b-instruct',
+    note: 'Европейски модел — полезен за български заявки.',
+  },
+  {
+    id: 'qwen',
+    label: 'Qwen (Alibaba)',
+    provider: 'workers-ai',
+    model: '@cf/qwen/qwen2.5-14b-instruct',
+    note: 'Силен многоезичен модел.',
   },
   {
     id: 'chatgpt',
-    label: 'ChatGPT',
+    label: 'ChatGPT (живият)',
+    provider: 'openai',
     secret: 'OPENAI_API_KEY',
-    note: 'Изисква ключ за OpenAI API. Ползва модел с достъп до уеб търсене.',
+    note: 'По избор. Изисква ключ за OpenAI API; ползва модел с уеб търсене.',
   },
   {
     id: 'perplexity',
     label: 'Perplexity',
+    provider: 'perplexity',
     secret: 'PERPLEXITY_API_KEY',
-    note: 'Изисква ключ за Perplexity API. Връща и списък с цитирани източници.',
+    note: 'По избор. Изисква ключ за Perplexity API; връща и цитираните източници.',
   },
   {
     id: 'gemini',
-    label: 'Gemini',
+    label: 'Gemini (живият)',
+    provider: 'gemini',
     secret: 'GEMINI_API_KEY',
-    note: 'Изисква ключ за Google AI Studio (Gemini API) с включено търсене.',
+    note: 'По избор. Изисква ключ за Google AI Studio с включено търсене.',
   },
 ];
 
 /** Секретите за външните двигатели не са в `Env`, защото са по избор. */
 type EngineSecrets = Record<string, string | undefined>;
 
+/**
+ * Списъкът от двигатели за тази инсталация.
+ *
+ * Разчита се отбранително: счупен JSON в конфигурацията не бива да оставя
+ * продукта без нито един двигател, затова при грешка се връщат стандартните.
+ */
+export function engines(env: Env): EngineInfo[] {
+  const raw = (env as unknown as EngineSecrets).VISIBILITY_ENGINES;
+  if (!raw) return DEFAULT_ENGINES;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_ENGINES;
+    const cleaned = parsed.filter(
+      (item): item is EngineInfo =>
+        Boolean(item) &&
+        typeof item === 'object' &&
+        typeof (item as EngineInfo).id === 'string' &&
+        typeof (item as EngineInfo).label === 'string',
+    );
+    return cleaned.length ? cleaned : DEFAULT_ENGINES;
+  } catch {
+    return DEFAULT_ENGINES;
+  }
+}
+
+export function engineById(env: Env, id: string): EngineInfo | null {
+  return engines(env).find((engine) => engine.id === id) ?? null;
+}
+
+/** Етикетът за таблото. Двигател, махнат от конфигурацията, пак има име в историята. */
+export function engineLabel(env: Env, id: string): string {
+  return engineById(env, id)?.label ?? id;
+}
+
 export function availableEngines(env: Env): EngineId[] {
   const secrets = env as unknown as EngineSecrets;
-  return ENGINES.filter((engine) => engine.secret === null || Boolean(secrets[engine.secret])).map((e) => e.id);
+  return engines(env)
+    .filter((engine) => (engine.provider === 'workers-ai' ? Boolean(env.AI) : Boolean(engine.secret && secrets[engine.secret])))
+    .map((engine) => engine.id);
 }
 
 export interface EngineAnswer {
@@ -79,16 +166,21 @@ const ASK_SYSTEM =
   'като посочваш конкретни марки, магазини или сайтове, които наистина съществуват в България. ' +
   'Ако препоръчваш сайтове, изписвай домейните им.';
 
-async function askWorkersAi(env: Env, query: string): Promise<EngineAnswer> {
+async function askWorkersAi(env: Env, engine: EngineInfo, query: string): Promise<EngineAnswer> {
   const messages: ChatMessage[] = [
     { role: 'system', content: ASK_SYSTEM },
     { role: 'user', content: query },
   ];
-  const result = await runChat(env, messages, { maxTokens: 700, temperature: 0.4 });
-  return { engine: 'workers-ai', text: result.text, citations: extractDomains(result.text) };
+  const result = await runChat(env, messages, { model: engine.model, maxTokens: 700, temperature: 0.4 });
+  // Празен отговор е грешка, не „не те споменават“: така изчезнал от каталога
+  // модел не се брои като нула точки видимост.
+  if (!result.text.trim()) {
+    return { engine: engine.id, text: '', citations: [], error: `Моделът ${engine.model} върна празен отговор.` };
+  }
+  return { engine: engine.id, text: result.text, citations: extractDomains(result.text) };
 }
 
-async function askOpenAi(apiKey: string, query: string): Promise<EngineAnswer> {
+async function askOpenAi(id: EngineId, apiKey: string, query: string): Promise<EngineAnswer> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -101,7 +193,7 @@ async function askOpenAi(apiKey: string, query: string): Promise<EngineAnswer> {
       max_tokens: 700,
     }),
   });
-  if (!res.ok) return { engine: 'chatgpt', text: '', citations: [], error: `OpenAI върна ${res.status}.` };
+  if (!res.ok) return { engine: id, text: '', citations: [], error: `OpenAI върна ${res.status}.` };
 
   const data = (await res.json()) as {
     choices?: { message?: { content?: string; annotations?: { url_citation?: { url?: string } }[] } }[];
@@ -113,10 +205,10 @@ async function askOpenAi(apiKey: string, query: string): Promise<EngineAnswer> {
     .filter(Boolean)
     .map(hostOf)
     .filter(Boolean);
-  return { engine: 'chatgpt', text, citations: cited.length ? cited : extractDomains(text) };
+  return { engine: id, text, citations: cited.length ? cited : extractDomains(text) };
 }
 
-async function askPerplexity(apiKey: string, query: string): Promise<EngineAnswer> {
+async function askPerplexity(id: EngineId, apiKey: string, query: string): Promise<EngineAnswer> {
   const res = await fetch('https://api.perplexity.ai/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -129,15 +221,15 @@ async function askPerplexity(apiKey: string, query: string): Promise<EngineAnswe
       max_tokens: 700,
     }),
   });
-  if (!res.ok) return { engine: 'perplexity', text: '', citations: [], error: `Perplexity върна ${res.status}.` };
+  if (!res.ok) return { engine: id, text: '', citations: [], error: `Perplexity върна ${res.status}.` };
 
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[]; citations?: string[] };
   const text = data.choices?.[0]?.message?.content ?? '';
   const cited = (data.citations ?? []).map(hostOf).filter(Boolean);
-  return { engine: 'perplexity', text, citations: cited.length ? cited : extractDomains(text) };
+  return { engine: id, text, citations: cited.length ? cited : extractDomains(text) };
 }
 
-async function askGemini(apiKey: string, query: string): Promise<EngineAnswer> {
+async function askGemini(id: EngineId, apiKey: string, query: string): Promise<EngineAnswer> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -151,7 +243,7 @@ async function askGemini(apiKey: string, query: string): Promise<EngineAnswer> {
       }),
     },
   );
-  if (!res.ok) return { engine: 'gemini', text: '', citations: [], error: `Gemini върна ${res.status}.` };
+  if (!res.ok) return { engine: id, text: '', citations: [], error: `Gemini върна ${res.status}.` };
 
   const data = (await res.json()) as {
     candidates?: {
@@ -166,31 +258,84 @@ async function askGemini(apiKey: string, query: string): Promise<EngineAnswer> {
     .filter(Boolean)
     .map(hostOf)
     .filter(Boolean);
-  return { engine: 'gemini', text, citations: cited.length ? cited : extractDomains(text) };
+  return { engine: id, text, citations: cited.length ? cited : extractDomains(text) };
 }
 
-export async function askEngine(env: Env, engine: EngineId, query: string): Promise<EngineAnswer> {
+export async function askEngine(env: Env, engineId: EngineId, query: string): Promise<EngineAnswer> {
+  const engine = engineById(env, engineId);
+  if (!engine) {
+    return { engine: engineId, text: '', citations: [], error: `Няма настроен двигател „${engineId}“.` };
+  }
+
   const secrets = env as unknown as EngineSecrets;
+  const key = engine.secret ? secrets[engine.secret] : undefined;
+
   try {
-    switch (engine) {
+    switch (engine.provider) {
       case 'workers-ai':
-        return await askWorkersAi(env, query);
-      case 'chatgpt':
-        return secrets.OPENAI_API_KEY
-          ? await askOpenAi(secrets.OPENAI_API_KEY, query)
-          : { engine, text: '', citations: [], error: 'Няма ключ за OpenAI.' };
+        return env.AI
+          ? await askWorkersAi(env, engine, query)
+          : { engine: engine.id, text: '', citations: [], error: 'Workers AI не е свързан.' };
+      case 'openai':
+        return key
+          ? await askOpenAi(engine.id, key, query)
+          : { engine: engine.id, text: '', citations: [], error: `Няма ключ ${engine.secret}.` };
       case 'perplexity':
-        return secrets.PERPLEXITY_API_KEY
-          ? await askPerplexity(secrets.PERPLEXITY_API_KEY, query)
-          : { engine, text: '', citations: [], error: 'Няма ключ за Perplexity.' };
+        return key
+          ? await askPerplexity(engine.id, key, query)
+          : { engine: engine.id, text: '', citations: [], error: `Няма ключ ${engine.secret}.` };
       case 'gemini':
-        return secrets.GEMINI_API_KEY
-          ? await askGemini(secrets.GEMINI_API_KEY, query)
-          : { engine, text: '', citations: [], error: 'Няма ключ за Gemini.' };
+        return key
+          ? await askGemini(engine.id, key, query)
+          : { engine: engine.id, text: '', citations: [], error: `Няма ключ ${engine.secret}.` };
+      default:
+        return { engine: engine.id, text: '', citations: [], error: `Непознат доставчик „${String(engine.provider)}“.` };
     }
   } catch (error) {
-    return { engine, text: '', citations: [], error: error instanceof Error ? error.message : 'Двигателят не отговори.' };
+    return {
+      engine: engine.id,
+      text: '',
+      citations: [],
+      error: error instanceof Error ? error.message : 'Двигателят не отговори.',
+    };
   }
+}
+
+/**
+ * Проверява кои настроени двигатели наистина отговарят.
+ *
+ * Каталогът на Workers AI се мени и вчерашният идентификатор може да е
+ * изчезнал. Тази проверка го хваща с един кратък въпрос вместо със спаднал
+ * до нула резултат на таблото — грешката в конфигурацията трябва да изглежда
+ * като грешка, а не като лоша новина за бизнеса.
+ */
+export interface EngineHealth {
+  id: EngineId;
+  label: string;
+  provider: string;
+  model?: string;
+  ok: boolean;
+  ms: number;
+  error?: string;
+}
+
+export async function checkEngines(env: Env): Promise<EngineHealth[]> {
+  const list = engines(env);
+  return Promise.all(
+    list.map(async (engine) => {
+      const started = Date.now();
+      const answer = await askEngine(env, engine.id, 'Кажи само думата „готово“.');
+      return {
+        id: engine.id,
+        label: engine.label,
+        provider: engine.provider,
+        model: engine.model,
+        ok: !answer.error && answer.text.trim().length > 0,
+        ms: Date.now() - started,
+        error: answer.error,
+      };
+    }),
+  );
 }
 
 /* ---------------------------------------------------------------- */
@@ -378,7 +523,7 @@ export async function runVisibilityCheck(
     const forEngine = answered.filter((check) => check.engine === engine);
     return {
       engine,
-      label: ENGINES.find((e) => e.id === engine)?.label ?? engine,
+      label: engineLabel(env, engine),
       score: forEngine.length
         ? Math.round((forEngine.filter((check) => check.mentioned).length / forEngine.length) * 100)
         : 0,

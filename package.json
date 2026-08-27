@@ -8,7 +8,8 @@
     "build": "astro build",
     "preview": "wrangler dev",
     "check": "astro check",
-    "deploy": "astro build && wrangler deploy",
+    "deploy:cf": "wrangler d1 migrations apply seo-bot --remote && wrangler deploy",
+    "deploy": "npm run build && npm run deploy:cf",
     "db:migrate": "wrangler d1 migrations apply seo-bot --remote",
     "db:migrate:local": "wrangler d1 migrations apply seo-bot --local"
   },

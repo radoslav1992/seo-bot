@@ -47,16 +47,35 @@
     // Адресът, на който Google връща OAuth потока. Трябва да съвпада точно с
     // „Authorized redirect URI“ в Google Cloud Console.
     "PUBLIC_SITE_URL": "https://seobot.bg",
-    // Моделът за чата. Смяната му е една променлива, не разписване на код.
+    // Моделът за чата и за инструментите. Трябва да поддържа tool calling.
+    //
+    // Каталогът на Workers AI се мени бързо, затова моделите са ПРОМЕНЛИВИ, а
+    // не константи в кода: смяната е един ред тук и нов деплой, без да се
+    // пипа логика. Кои идентификатори са валидни днес — виж docs/models.md;
+    // `/api/models` в самото приложение проверява настроените.
     "CHAT_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     // По-малък и по-бърз модел за помощните задачи (заглавия на чатове,
-    // класифициране на отговор) — не всяка задача заслужава 70B.
-    "FAST_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast"
+    // кратки класификации) — не всяка задача заслужава голям модел.
+    "FAST_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
+
+    // Двигателите, по които се мери видимостта.
+    //
+    // Различни модели от различни лаборатории, всичките хостнати от
+    // Cloudflare — затова работят без нито един външен ключ. Празно или
+    // невалидно тук значи „ползвай вградения списък“ (DEFAULT_ENGINES в
+    // src/lib/visibility.ts).
+    //
+    // Външен двигател се добавя със `"provider": "openai" | "perplexity" |
+    // "gemini"` и `"secret": "ИМЕ_НА_СЕКРЕТА"` вместо `"model"`.
+    "VISIBILITY_ENGINES": "[{\"id\":\"llama\",\"label\":\"Llama (Meta)\",\"provider\":\"workers-ai\",\"model\":\"@cf/meta/llama-3.3-70b-instruct-fp8-fast\",\"note\":\"Основният модел.\"},{\"id\":\"gpt-oss\",\"label\":\"GPT-OSS (OpenAI)\",\"provider\":\"workers-ai\",\"model\":\"@cf/openai/gpt-oss-120b\",\"note\":\"Отворените тегла на OpenAI.\"},{\"id\":\"gemma\",\"label\":\"Gemma (Google)\",\"provider\":\"workers-ai\",\"model\":\"@cf/google/gemma-3-12b-it\",\"note\":\"Моделът на Google.\"},{\"id\":\"mistral\",\"label\":\"Mistral\",\"provider\":\"workers-ai\",\"model\":\"@cf/mistralai/mistral-small-3.1-24b-instruct\",\"note\":\"Европейски модел.\"}]"
   }
 
-  // Секрети (`wrangler secret put`), нарочно НЕ в този файл:
-  //   SESSION_SECRET       — подписва бисквитките за вход
-  //   TOKEN_ENC_KEY        — шифрова Google refresh токените в D1
+  // Секрети — задават се в таблото на Cloudflare (Worker → Settings →
+  // Variables and Secrets) или с `wrangler secret put`. Нарочно НЕ тук:
+  //   SESSION_SECRET       — подписва бисквитките за вход (задължителен)
+  //   TOKEN_ENC_KEY        — шифрова Google refresh токените в D1 (задължителен)
   //   GOOGLE_CLIENT_ID     — OAuth клиент за Search Console и Analytics
   //   GOOGLE_CLIENT_SECRET — същият клиент
+  // По избор, само ако искаш и живите двигатели покрай моделите на Cloudflare:
+  //   OPENAI_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY
 }

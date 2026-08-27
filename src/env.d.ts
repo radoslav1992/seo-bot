@@ -58,8 +58,23 @@ interface Env {
   GOOGLE_CLIENT_SECRET?: string;
 
   PUBLIC_SITE_URL?: string;
+  /** Моделът за чата и инструментите. Трябва да поддържа tool calling. */
   CHAT_MODEL?: string;
+  /** По-малкият модел за заглавия и кратки задачи. */
   FAST_MODEL?: string;
+  /**
+   * Двигателите за проверка на видимост, като JSON низ (виж wrangler.jsonc).
+   * Празно значи „ползвай вградения списък“.
+   */
+  VISIBILITY_ENGINES?: string;
+
+  /**
+   * По избор: живите двигатели покрай моделите на Cloudflare. Липсва ли
+   * ключът, двигателят се показва като „не отговаря“ и не се подменя с друг.
+   */
+  OPENAI_API_KEY?: string;
+  PERPLEXITY_API_KEY?: string;
+  GEMINI_API_KEY?: string;
 }
 
 type Runtime = import('@astrojs/cloudflare').Runtime<Env>;

@@ -1,45 +1,55 @@
-# Пускане в Cloudflare
+# Пускане през GitHub
 
-Приложението е Astro сайт с адаптер за Cloudflare: публичните страници се
-пререндерират при билда и се качват като Worker assets, а таблото, чатът и
-всичко под `/api/` се изпълняват в Worker-а.
+Cloudflare следи хранилището и строи сам при всяко бутане в `main`
+(Workers Builds). GitHub Actions тук **не публикува** — то само проверява, че
+проектът се компилира. Два независими пътя към една и съща услуга рано или
+късно качват две различни версии една върху друга.
 
 ## 1. Ресурсите в акаунта
 
-```bash
-# Базата
-npx wrangler d1 create seo-bot
+Веднъж, от лаптоп или от Cloudflare таблото:
 
-# Кешът (по избор — липсва ли, всичко работи, просто по-бавно)
-npx wrangler kv namespace create CACHE
+```bash
+npx wrangler d1 create seo-bot
+npx wrangler kv namespace create CACHE   # по избор — липсва ли, всичко работи, просто по-бавно
 ```
 
 И двете команди изписват идентификатор. Впиши ги в `wrangler.jsonc` на
-мястото на нулите — това не са тайни, а адреси, и стоят в хранилището,
-защото Cloudflare строи оттук и връзка, добавена от таблото, се затрива при
-следващия деплой.
+мястото на нулите и бутни промяната. Това не са тайни, а адреси, и стоят в
+хранилището точно защото Cloudflare строи оттук: връзка, добавена ръчно от
+таблото, се затрива при следващия деплой.
 
-Workers AI не иска създаване: `"ai": { "binding": "AI" }` в `wrangler.jsonc`
-е достатъчно. Сметката е на акаунта.
+Workers AI не иска създаване — `"ai": { "binding": "AI" }` е достатъчно.
 
-## 2. Схемата
+## 2. Закачането на хранилището
 
-```bash
-npm run db:migrate          # върху живата база
-npm run db:migrate:local    # върху локалната, за `wrangler dev`
-```
+Cloudflare Dashboard → **Workers & Pages** → **Create** → **Import a repository**
+→ избираш `radoslav1992/seo-bot`.
+
+| Поле | Стойност |
+|---|---|
+| Branch | `main` |
+| Build command | `npm run build` |
+| Deploy command | `npm run deploy:cf` |
+| Root directory | *(празно)* |
+
+`deploy:cf` пуска миграциите на D1 **преди** качването и чак после деплойва —
+за да не посрещне новият код стара схема. Първият билд ще се провали, ако
+`database_id` още е нули; това е нарочно шумно.
 
 ## 3. Секретите
 
-```bash
-# Подписва бисквитките за вход. Без него входът връща 503.
-npx wrangler secret put SESSION_SECRET
+Worker → **Settings** → **Variables and Secrets** → тип **Secret**.
 
-# Шифрова Google refresh токените в базата. Без него връзката с Google
-# е изключена — умишлено: токен на чужд Search Console не бива да лежи
-# в чист вид дори в собствената ни база.
-npx wrangler secret put TOKEN_ENC_KEY
-```
+| Секрет | Задължителен | За какво |
+|---|---|---|
+| `SESSION_SECRET` | да | Подписва бисквитките за вход. Без него входът връща 503. |
+| `TOKEN_ENC_KEY` | да | Шифрова Google refresh токените в базата. Без него връзката с Google е изключена. |
+| `GOOGLE_CLIENT_ID` | за GSC/GA | OAuth клиент |
+| `GOOGLE_CLIENT_SECRET` | за GSC/GA | същият клиент |
+| `OPENAI_API_KEY` | не | само ако искаш и живия ChatGPT като двигател |
+| `PERPLEXITY_API_KEY` | не | същото за Perplexity |
+| `GEMINI_API_KEY` | не | същото за Gemini |
 
 Стойностите да са дълги случайни низове:
 
@@ -51,15 +61,18 @@ openssl rand -base64 48
 > записаните Google токени нечетими и всички потребители трябва да свържат
 > акаунтите си наново. `SESSION_SECRET` при смяна просто отписва всички.
 
-За локална разработка същите стойности отиват в `.dev.vars` (файлът е в
-`.gitignore`):
+Секретите се задават **веднъж** и преживяват деплоите — за разлика от
+`vars`, които идват от `wrangler.jsonc` при всяко качване.
 
-```
-SESSION_SECRET="…"
-TOKEN_ENC_KEY="…"
-```
+## 4. Домейнът
 
-## 4. Google Search Console и Analytics
+Worker → **Settings** → **Domains & Routes** → Add custom domain.
+
+После оправи `PUBLIC_SITE_URL` в `wrangler.jsonc` и в `src/data/site.mjs`,
+защото от тях се смятат каноничните адреси, sitemap-ът и — важното — адресът
+за връщане на Google OAuth.
+
+## 5. Google Search Console и Analytics
 
 1. В [Google Cloud Console](https://console.cloud.google.com/) създай проект.
 2. Включи **Google Search Console API**, **Google Analytics Data API** и
@@ -68,55 +81,17 @@ TOKEN_ENC_KEY="…"
    организация) с обхватите:
    - `https://www.googleapis.com/auth/webmasters.readonly`
    - `https://www.googleapis.com/auth/analytics.readonly`
-4. Създай OAuth клиент от тип **Web application** с authorized redirect URI:
+4. Създай OAuth клиент тип **Web application** с authorized redirect URI:
    `https://ТВОЯТ-ДОМЕЙН/api/google/callback`
-   Адресът трябва да съвпада ЗНАК ПО ЗНАК с `PUBLIC_SITE_URL` в
-   `wrangler.jsonc` плюс `/api/google/callback`; Google отхвърля всичко друго.
-5. Подай ключовете:
 
-```bash
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-```
+   Адресът трябва да съвпада **знак по знак** с `PUBLIC_SITE_URL` плюс
+   `/api/google/callback`; Google отхвърля всичко друго.
+5. Подай `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET` като секрети (стъпка 3).
 
 Докато екранът за съгласие е в режим „Testing“, само изрично добавените
 тестови потребители могат да свържат акаунт.
 
-## 5. Двигателите за проверка на видимост
-
-Cloudflare Workers AI работи веднага и е базовата мярка. Другите двигатели
-се включват със свой ключ и **не се подменят мълчаливо** с друг модел —
-двигател без ключ се показва като „не е свързан“, за да не пише таблото
-„ChatGPT: 71“ за число, което не идва от ChatGPT.
-
-```bash
-npx wrangler secret put OPENAI_API_KEY        # ChatGPT
-npx wrangler secret put PERPLEXITY_API_KEY    # Perplexity
-npx wrangler secret put GEMINI_API_KEY        # Gemini
-```
-
-## 6. Деплой
-
-```bash
-npm run deploy
-```
-
-Или закачи хранилището към Workers Builds — командата за билд е
-`npm run build`, а изходната директория `dist`.
-
-## Локална разработка
-
-```bash
-npm run dev        # Astro dev сървър, бърз, без Cloudflare binding-и
-npm run preview    # wrangler dev — истинският Worker с D1 и KV
-```
-
-**Workers AI не работи при `wrangler dev --local`** — binding-ът връща
-„Binding AI needs to be run remotely“. Чатът и проверката на видимост искат
-`npx wrangler dev --remote` или пуснат Worker. Всичко останало — вход,
-табло, анализатор, задачи — работи изцяло локално.
-
-## Проверка след пускане
+## 6. Проверката след първия деплой
 
 ```bash
 curl -s https://ТВОЯТ-ДОМЕЙН/ -o /dev/null -w '%{http_code}\n'          # 200
@@ -124,5 +99,33 @@ curl -s https://ТВОЯТ-ДОМЕЙН/tablo/ -o /dev/null -w '%{http_code}\n' 
 curl -s https://ТВОЯТ-ДОМЕЙН/api/chats -w '\n%{http_code}\n'            # 401 без вход
 ```
 
-Регистрирай акаунт, добави домейн и натисни „Нова проверка“. Първата проверка
-съставя въпросите сама и отнема около минута.
+После, в браузъра:
+
+1. Регистрирай акаунт и добави домейн.
+2. **Табло → Двигатели → „Провери моделите“.** Това е задължителната стъпка:
+   каталогът на Workers AI се мени и вчерашният идентификатор може да е
+   изчезнал. Не отговори ли модел — поправи `VISIBILITY_ENGINES` или
+   `CHAT_MODEL` в `wrangler.jsonc` и бутни. Подробностите са в
+   [docs/models.md](models.md).
+3. „Нова проверка“ — първата отнема около минута.
+
+## Локална разработка
+
+```bash
+npm install
+npm run db:migrate:local
+npm run dev        # Astro dev сървър — бърз, без Cloudflare binding-и
+npm run preview    # wrangler dev — истинският Worker с D1 и KV
+```
+
+Секретите за локално отиват в `.dev.vars` (в `.gitignore`):
+
+```
+SESSION_SECRET="…"
+TOKEN_ENC_KEY="…"
+```
+
+**Workers AI не работи при `wrangler dev --local`** — binding-ът връща
+„Binding AI needs to be run remotely“. Чатът и проверката на видимост искат
+`npx wrangler dev --remote`. Всичко останало — вход, табло, анализатор,
+задачи — работи изцяло локално.

@@ -6,7 +6,7 @@
  * невъзможен въпроса „кои точно заявки паднаха“ — а той е целият продукт.
  */
 
-import { ENGINES, type EngineId } from './visibility';
+import { engineLabel, engines, type EngineId } from './visibility';
 import {
   latestAudit, listChats, listCompetitors, listTasks, primaryDomain, visibilitySince,
   type ChatRow, type DomainRow, type TaskRow,
@@ -60,6 +60,8 @@ export interface DashboardData {
   } | null;
   tasks: TaskRow[];
   chats: (ChatRow & { messages: number })[];
+  /** Колко двигателя са настроени — за да каже таблото по колко се мери. */
+  configuredEngines: number;
 }
 
 /** Броят дни е избор на потребителя, но не произволен — таблото има три копчета. */
@@ -69,6 +71,7 @@ export function normalizePeriod(raw: string | null): number {
 }
 
 export async function loadDashboard(
+  env: Env,
   db: D1Database,
   userId: string,
   periodDays: number,
@@ -80,6 +83,7 @@ export async function loadDashboard(
     return {
       domain: null, competitors: [], periodDays, score: null, change: null, engines: [],
       series: [], queries: [], totalQueries: 0, rivals: [], audit: null, tasks, chats,
+      configuredEngines: engines(env).length,
     };
   }
 
@@ -105,18 +109,22 @@ export async function loadDashboard(
         Math.round((older.filter((c) => c.mentioned === 1).length / older.length) * 100)
       : null;
 
-  const engines: EngineScore[] = ENGINES.map((engine) => {
-    const forEngine = checks.filter((check) => check.engine === engine.id);
-    return {
-      id: engine.id,
-      label: engine.label,
-      score: forEngine.length
-        ? Math.round((forEngine.filter((check) => check.mentioned === 1).length / forEngine.length) * 100)
-        : 0,
-      asked: forEngine.length,
-    };
-  })
-    .filter((engine) => engine.asked > 0)
+  /*
+   * Редът се води от ЗАПИСАНИТЕ проверки, не от настроените двигатели.
+   * Махнат от конфигурацията двигател има история и тя не бива да изчезва от
+   * таблото — иначе смяна на модел изглежда като изтрити измервания.
+   */
+  const engineIds = [...new Set(checks.map((check) => check.engine))];
+  const engineScores: EngineScore[] = engineIds
+    .map((id) => {
+      const forEngine = checks.filter((check) => check.engine === id);
+      return {
+        id,
+        label: engineLabel(env, id),
+        score: Math.round((forEngine.filter((check) => check.mentioned === 1).length / forEngine.length) * 100),
+        asked: forEngine.length,
+      };
+    })
     .sort((a, b) => b.score - a.score);
 
   // Редицата за графиката: по един ден, само дните с проверки. Права линия
@@ -140,7 +148,7 @@ export async function loadDashboard(
     entry.total += 1;
     if (check.mentioned === 1) {
       entry.mentioned += 1;
-      entry.engines.add(ENGINES.find((e) => e.id === check.engine)?.label ?? check.engine);
+      entry.engines.add(engineLabel(env, check.engine));
       if (check.position !== null && (entry.position === null || check.position < entry.position)) {
         entry.position = check.position;
       }
@@ -198,8 +206,9 @@ export async function loadDashboard(
   }
 
   return {
-    domain, competitors, periodDays, score, change, engines, series, queries,
+    domain, competitors, periodDays, score, change, engines: engineScores, series, queries,
     totalQueries: byQuery.size, rivals, audit: auditSummary, tasks, chats,
+    configuredEngines: engines(env).length,
   };
 }
 
