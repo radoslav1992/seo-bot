@@ -90,10 +90,18 @@ const auditAt = data.audit
         <div class="split-2" style="display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px; align-items: start">
           <div>
             <p class="kicker kicker-accent" style="margin-bottom: 16px">Видимост в AI отговори</p>
+            {!data.hasGroundedEngine && (
+              <p class="notice" style="margin: 0 0 20px; max-width: 46ch">
+                Нито един двигател с живо търсене не е готов за пускане. Без такъв не се мери видимост —
+                само какво моделите знаят наизуст. Натисни „Провери моделите“ в раздел „Двигатели“, за да
+                видиш какво липсва.
+              </p>
+            )}
             {data.score === null ? (
               <p style="font-size: 15px; line-height: 1.7; margin: 0 0 24px; max-width: 42ch; color: var(--color-neutral-800)">
-                Още няма проверки. Натисни „Нова проверка“ — ботът съставя въпросите сам и отнема около
-                минута.
+                {data.memoryScore === null
+                  ? 'Още няма проверки. Натисни „Нова проверка“ — ботът съставя въпросите сам и отнема около минута.'
+                  : 'Още няма проверка с двигател, който търси в интернет. Досегашните мерят само познатост.'}
               </p>
             ) : (
               <>
@@ -104,9 +112,21 @@ const auditAt = data.audit
                   {data.change === null
                     ? 'Още няма достатъчно данни за сравнение с началото на периода.'
                     : `${data.change > 0 ? '+' : ''}${scorePoints(data.change)} за ${days(period)}.`}
-                  {' '}Брандът е споменат в {data.score}% от проверените заявки.
+                  {' '}Брандът е споменат в {data.score}% от отговорите на двигателите, които търсят в
+                  интернет в момента на въпроса.
                 </p>
               </>
+            )}
+
+            {data.memoryScore !== null && (
+              <div style="border-top: 2px solid var(--color-divider); padding-top: 16px; margin-bottom: 24px">
+                <p class="kicker" style="margin-bottom: 8px">Познатост без търсене</p>
+                <p style="font-size: 15px; line-height: 1.6; margin: 0; color: var(--color-neutral-800)">
+                  <strong class="num" style="font-size: 22px">{data.memoryScore}%</strong> — толкова от
+                  моделите, попитани без достъп до интернет, знаят бранда наизуст. Друго измерване, не
+                  видимост: показва дали си влязъл в данните за обучение.
+                </p>
+              </div>
             )}
 
             {data.engines.length > 0 && (
@@ -115,7 +135,12 @@ const auditAt = data.audit
                   <div
                     style={`display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; font-size: 14.5px${index < data.engines.length - 1 ? '; border-bottom: 1px solid var(--color-neutral-300)' : ''}`}
                   >
-                    <span>{engine.label} <span style="color: var(--color-neutral-700); font-size: 12.5px">· {queries(engine.asked)}</span></span>
+                    <span>
+                      {engine.label}
+                      <span style="color: var(--color-neutral-700); font-size: 12.5px">
+                        {' '}· {queries(engine.asked)}{engine.grounded ? '' : ' · без търсене'}
+                      </span>
+                    </span>
                     <span class="num" style="font-weight: 800">{engine.score}</span>
                   </div>
                 ))}
@@ -312,9 +337,13 @@ const auditAt = data.audit
         <button type="button" class="btn btn-ghost" data-check-models style="font-size: 13.5px">Провери моделите</button>
       </div>
       <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 0 0 20px">
-        Видимостта се мери по {data.configuredEngines} настроени двигателя — различни модели, а не един
-        модел с няколко етикета. Каталогът на Cloudflare се мени, затова проверката казва кои от тях
-        наистина отговарят днес.
+        {data.configuredEngines} настроени двигателя. Тези с живо търсене мерят видимостта — те питат
+        интернет в момента на въпроса, както прави и клиентът ти. Тези без търсене отговарят от паметта си
+        и мерят друго: дали брандът изобщо е влязъл в данните за обучение.
+      </p>
+      <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 0 0 20px">
+        Проприетарните модели минават през Cloudflare AI Gateway и не искат чужди ключове — плащат се от
+        сметката в Cloudflare. Каталогът се мени, затова проверката казва кои наистина отговарят днес.
       </p>
       <div data-models style="border-top: 2px solid var(--color-text); padding-top: 20px">
         <p style="font-size: 14px; color: var(--color-neutral-700); margin: 0">

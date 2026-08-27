@@ -122,6 +122,7 @@ interface EngineHealth {
   label: string;
   provider: string;
   model?: string;
+  grounded: boolean;
   ok: boolean;
   ms: number;
   error?: string;
@@ -135,17 +136,34 @@ interface ModelsResponse {
   engines?: EngineHealth[];
   working?: number;
   configured?: number;
+  gatewayReady?: boolean;
+  groundedConfigured?: number;
+  groundedWorking?: number;
   hint?: string;
 }
 
 const modelsBox = document.querySelector<HTMLElement>('[data-models]');
 
-function row(label: string, detail: string, ok: boolean, ms: number, error?: string): string {
+/** `grounded` е `null` за моделите на самото приложение (чат и бърз). */
+function row(
+  label: string,
+  detail: string,
+  ok: boolean,
+  ms: number,
+  grounded: boolean | null,
+  error?: string,
+): string {
+  const badge =
+    grounded === null
+      ? ''
+      : grounded
+        ? '<span class="tag tag-accent" style="margin-left: 8px">с търсене</span>'
+        : '<span class="tag tag-neutral" style="margin-left: 8px">без търсене</span>';
   return `
     <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px 24px; align-items: baseline;
                 padding: 12px 0; border-bottom: 1px solid var(--color-neutral-300)">
       <div>
-        <p style="font-weight: 600; font-size: 15px; margin: 0 0 2px">${escapeHtml(label)}</p>
+        <p style="font-weight: 600; font-size: 15px; margin: 0 0 2px">${escapeHtml(label)}${badge}</p>
         <p style="font-size: 12.5px; color: var(--color-neutral-700); margin: 0; font-family: ui-monospace, monospace">
           ${escapeHtml(detail)}</p>
         ${error ? `<p style="font-size: 12.5px; color: var(--color-accent-700); margin: 4px 0 0">${escapeHtml(error)}</p>` : ''}
@@ -181,12 +199,19 @@ document.querySelector<HTMLButtonElement>('[data-check-models]')?.addEventListen
   }
 
   const engines = data.engines ?? [];
+  // Двигателите с търсене отгоре — те са тези, от които зависи видимостта.
+  const ordered = [...engines].sort((a, b) => Number(b.grounded) - Number(a.grounded));
+  const allWell = data.working === data.configured && (data.groundedWorking ?? 0) > 0;
+
   modelsBox.innerHTML =
-    (data.chat ? row(`Чат — ${data.chat.role}`, data.chat.model, data.chat.ok, data.chat.ms, data.chat.error) : '') +
-    (data.fast ? row(`Бърз — ${data.fast.role}`, data.fast.model, data.fast.ok, data.fast.ms, data.fast.error) : '') +
-    engines.map((engine) => row(engine.label, engine.model ?? engine.provider, engine.ok, engine.ms, engine.error)).join('') +
-    `<p style="font-size: 13.5px; line-height: 1.7; color: ${data.working === data.configured ? 'var(--color-neutral-700)' : 'var(--color-accent-700)'}; margin: 16px 0 0">
-       ${data.working}/${data.configured} двигателя отговарят. ${escapeHtml(data.hint ?? '')}</p>`;
+    (data.chat ? row(`Чат — ${data.chat.role}`, data.chat.model, data.chat.ok, data.chat.ms, null, data.chat.error) : '') +
+    (data.fast ? row(`Бърз — ${data.fast.role}`, data.fast.model, data.fast.ok, data.fast.ms, null, data.fast.error) : '') +
+    ordered
+      .map((engine) => row(engine.label, engine.model ?? engine.provider, engine.ok, engine.ms, engine.grounded, engine.error))
+      .join('') +
+    `<p style="font-size: 13.5px; line-height: 1.7; color: ${allWell ? 'var(--color-neutral-700)' : 'var(--color-accent-700)'}; margin: 16px 0 0">
+       ${data.groundedWorking}/${data.groundedConfigured} двигателя с търсене отговарят
+       (${data.working}/${data.configured} общо). ${escapeHtml(data.hint ?? '')}</p>`;
 });
 
 /* ── Google ─────────────────────────────────────────────────────── */

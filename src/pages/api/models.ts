@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { guardApi } from '../../lib/guard';
-import { checkEngines, engines } from '../../lib/visibility';
+import { checkEngines, engines, isGrounded } from '../../lib/visibility';
 import { DEFAULT_CHAT_MODEL, DEFAULT_FAST_MODEL, runChat } from '../../lib/ai';
 
 export const prerender = false;
@@ -27,6 +27,10 @@ export const GET: APIRoute = async (context) => {
       error: 'Workers AI не е свързан. Провери `"ai": { "binding": "AI" }` в wrangler.jsonc.',
     }, { status: 503 });
   }
+
+  // Двигателите с търсене минават през Gateway, не през binding-а — липсващият
+  // токен е най-честата причина цялата видимост да е празна.
+  const gatewayReady = Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN);
 
   const chatModel = env.CHAT_MODEL || DEFAULT_CHAT_MODEL;
   const fastModelId = env.FAST_MODEL || DEFAULT_FAST_MODEL;
@@ -57,6 +61,9 @@ export const GET: APIRoute = async (context) => {
   ]);
 
   const working = engineHealth.filter((engine) => engine.ok).length;
+  const groundedWorking = engineHealth.filter((engine) => engine.ok && engine.grounded).length;
+  const groundedConfigured = engines(env).filter(isGrounded).length;
+
   return Response.json({
     ok: true,
     chat: { role: 'чат и инструменти', ...chat },
@@ -64,13 +71,19 @@ export const GET: APIRoute = async (context) => {
     engines: engineHealth,
     configured: engines(env).length,
     working,
+    gatewayReady,
+    groundedConfigured,
+    groundedWorking,
     // Съветът се дава тук, а не в интерфейса: който вика този маршрут, иска
     // да знае какво да поправи, а не само че нещо не е наред.
-    hint:
-      working === 0
-        ? 'Нито един двигател не отговаря. Провери идентификаторите на моделите срещу актуалния каталог на Workers AI и ги задай в VISIBILITY_ENGINES.'
-        : engineHealth.some((engine) => !engine.ok)
-          ? 'Част от двигателите не отговарят — виж грешките и поправи идентификаторите им в VISIBILITY_ENGINES.'
-          : 'Всички настроени двигатели отговарят.',
+    hint: !gatewayReady && groundedConfigured > 0
+      ? 'Липсват CLOUDFLARE_ACCOUNT_ID или CLOUDFLARE_API_TOKEN — без тях нито един двигател с живо търсене не работи и видимост НЕ се мери.'
+      : groundedConfigured === 0
+        ? 'Няма настроен двигател с живо търсене. Без такъв продуктът мери само познатост, не видимост.'
+        : groundedWorking === 0
+          ? 'Нито един двигател с търсене не отговаря. Провери идентификаторите на моделите срещу каталога на AI Gateway и ги задай в VISIBILITY_ENGINES.'
+          : engineHealth.some((engine) => !engine.ok)
+            ? 'Част от двигателите не отговарят — виж грешките и поправи идентификаторите им в VISIBILITY_ENGINES.'
+            : 'Всички настроени двигатели отговарят.',
   });
 };

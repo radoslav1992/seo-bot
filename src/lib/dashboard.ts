@@ -6,7 +6,7 @@
  * невъзможен въпроса „кои точно заявки паднаха“ — а той е целият продукт.
  */
 
-import { engineLabel, engines, type EngineId } from './visibility';
+import { availableEngines, engineLabel, engines, isGrounded, type EngineId } from './visibility';
 import {
   latestAudit, listChats, listCompetitors, listTasks, primaryDomain, visibilitySince,
   type ChatRow, type DomainRow, type TaskRow,
@@ -20,6 +20,7 @@ export interface EngineScore {
   label: string;
   score: number;
   asked: number;
+  grounded: boolean;
 }
 
 export interface QueryRow {
@@ -39,8 +40,22 @@ export interface DashboardData {
   domain: DomainRow | null;
   competitors: string[];
   periodDays: number;
-  /** 0–100, или `null` ако още няма нито една проверка. */
+  /**
+   * Видимостта: 0–100 по двигателите С ЖИВО ТЪРСЕНЕ. `null`, ако такъв
+   * двигател още не е питан — тогава няма измерена видимост и таблото го
+   * казва вместо да покаже число, което значи друго.
+   */
   score: number | null;
+  /** Отделно число: какво знаят моделите наизуст, без търсене. */
+  memoryScore: number | null;
+  /**
+   * Има ли двигател с търсене, който МОЖЕ да се пусне сега.
+   *
+   * Нарочно не е „настроен ли е“: настроен двигател без токен за Gateway е
+   * същото като липсващ, а разликата се вижда само в „Провери моделите“.
+   * Таблото трябва да предупреди в двата случая.
+   */
+  hasGroundedEngine: boolean;
   /** Разлика спрямо първата половина на периода. `null` при малко данни. */
   change: number | null;
   engines: EngineScore[];
@@ -64,6 +79,12 @@ export interface DashboardData {
   configuredEngines: number;
 }
 
+/** Двигател с търсене, който наистина може да се пусне с текущите настройки. */
+function usableGrounded(env: Env): boolean {
+  const ready = new Set(availableEngines(env));
+  return engines(env).some((engine) => isGrounded(engine) && ready.has(engine.id));
+}
+
 /** Броят дни е избор на потребителя, но не произволен — таблото има три копчета. */
 export function normalizePeriod(raw: string | null): number {
   const value = Number(raw);
@@ -81,9 +102,10 @@ export async function loadDashboard(
 
   if (!domain) {
     return {
-      domain: null, competitors: [], periodDays, score: null, change: null, engines: [],
+      domain: null, competitors: [], periodDays, score: null, memoryScore: null, change: null, engines: [],
       series: [], queries: [], totalQueries: 0, rivals: [], audit: null, tasks, chats,
       configuredEngines: engines(env).length,
+      hasGroundedEngine: usableGrounded(env),
     };
   }
 
@@ -94,15 +116,19 @@ export async function loadDashboard(
     latestAudit(db, domain.id),
   ]);
 
-  const score = checks.length
-    ? Math.round((checks.filter((check) => check.mentioned === 1).length / checks.length) * 100)
-    : null;
+  const share = (rows: typeof checks): number | null =>
+    rows.length ? Math.round((rows.filter((check) => check.mentioned === 1).length / rows.length) * 100) : null;
+
+  const groundedChecks = checks.filter((check) => check.grounded === 1);
+  const score = share(groundedChecks);
+  const memoryScore = share(checks.filter((check) => check.grounded !== 1));
 
   // Промяната сравнява двете половини на периода. Изисква по 5 проверки във
   // всяка — под това число разликата е шум и „+11 точки“ би било измислица.
+  // Сравнението е само между проверките с търсене — двете числа не се смесват.
   const midpoint = since + (Date.now() - since) / 2;
-  const older = checks.filter((check) => check.created_utc < midpoint);
-  const newer = checks.filter((check) => check.created_utc >= midpoint);
+  const older = groundedChecks.filter((check) => check.created_utc < midpoint);
+  const newer = groundedChecks.filter((check) => check.created_utc >= midpoint);
   const change =
     older.length >= 5 && newer.length >= 5
       ? Math.round((newer.filter((c) => c.mentioned === 1).length / newer.length) * 100) -
@@ -123,6 +149,7 @@ export async function loadDashboard(
         label: engineLabel(env, id),
         score: Math.round((forEngine.filter((check) => check.mentioned === 1).length / forEngine.length) * 100),
         asked: forEngine.length,
+        grounded: forEngine.some((check) => check.grounded === 1),
       };
     })
     .sort((a, b) => b.score - a.score);
@@ -130,7 +157,7 @@ export async function loadDashboard(
   // Редицата за графиката: по един ден, само дните с проверки. Права линия
   // през дни без данни би нарисувала измерване, което не се е случило.
   const byDay = new Map<number, { total: number; hits: number }>();
-  for (const check of checks) {
+  for (const check of groundedChecks) {
     const day = Math.floor(check.created_utc / DAY_MS) * DAY_MS;
     const bucket = byDay.get(day) ?? { total: 0, hits: 0 };
     bucket.total += 1;
@@ -206,9 +233,10 @@ export async function loadDashboard(
   }
 
   return {
-    domain, competitors, periodDays, score, change, engines: engineScores, series, queries,
+    domain, competitors, periodDays, score, memoryScore, change, engines: engineScores, series, queries,
     totalQueries: byQuery.size, rivals, audit: auditSummary, tasks, chats,
     configuredEngines: engines(env).length,
+    hasGroundedEngine: usableGrounded(env),
   };
 }
 

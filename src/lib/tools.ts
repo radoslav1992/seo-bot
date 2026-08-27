@@ -211,9 +211,11 @@ export const TOOLS: Record<string, ToolDefinition> = {
     schema: {
       name: 'check_ai_visibility',
       description:
-        'Задава реални въпроси на AI двигателите и проверява дали брандът на потребителя е споменат в отговора. ' +
-        'Това е основната мярка за GEO видимост. Ползвай го при въпроси „как стоим“, „споменават ли ни“, ' +
-        '„защо паднахме“.',
+        'Задава реални въпроси на AI двигателите С ЖИВО ТЪРСЕНЕ (ChatGPT, Claude, Grok, Gemini…) и проверява ' +
+        'дали брандът на потребителя е споменат в отговора. Това е основната мярка за GEO видимост. ' +
+        'Ползвай го при въпроси „как стоим“, „споменават ли ни“, „защо паднахме“. ' +
+        'Внимание: резултатът разделя видимостта (с търсене) от познатостта (какво моделите знаят наизуст) — ' +
+        'те са две различни числа и не се смесват.',
       parameters: {
         type: 'object',
         properties: {
@@ -252,15 +254,31 @@ export const TOOLS: Record<string, ToolDefinition> = {
         run.checks.filter((check) => !check.error),
       );
 
-      const missed = run.checks.filter((check) => !check.error && !check.mentioned).map((check) => check.query);
+      const answered = run.checks.filter((check) => !check.error);
+      const grounded = answered.filter((check) => check.grounded);
+      const missed = grounded.filter((check) => !check.mentioned).map((check) => check.query);
+      const failed = run.checks.filter((check) => check.error);
+
       const summary = [
-        `Видимост: ${run.score}% (${run.checks.filter((c) => c.mentioned).length} от ${run.checks.filter((c) => !c.error).length} отговора споменават ${context.domain.domain}).`,
-        `По двигател: ${run.byEngine.map((engine) => `${engine.label} ${engine.score}% (${engine.asked} заявки)`).join(', ')}.`,
+        run.score === null
+          ? 'ВИДИМОСТ: няма измерена. Нито един двигател с живо търсене не отговори — кажи на потребителя ' +
+            'да провери двигателите от таблото, вместо да тълкуваш това като нула видимост.'
+          : `Видимост (двигатели с живо търсене): ${run.score}% — ${grounded.filter((c) => c.mentioned).length} ` +
+            `от ${grounded.length} отговора споменават ${context.domain.domain}.`,
+        run.memoryScore !== null
+          ? `Отделно, познатост без търсене (какво моделите знаят наизуст): ${run.memoryScore}%. ` +
+            'Това НЕ е видимост — не ги смесвай в отговора.'
+          : '',
+        `По двигател: ${run.byEngine.map((engine) => `${engine.label} ${engine.score}% (${engine.asked} заявки${engine.grounded ? '' : ', без търсене'})`).join(', ')}.`,
         run.topCompetitors.length
           ? `Най-често излизат вместо теб: ${run.topCompetitors.slice(0, 5).map((c) => `${c.domain} (${c.mentions})`).join(', ')}.`
           : 'Отговорите не сочат конкретни конкурентни домейни.',
-        missed.length ? `Заявки без споменаване: ${missed.slice(0, 6).join(' | ')}.` : 'Брандът е споменат във всички проверени заявки.',
-      ].join('\n');
+        missed.length ? `Заявки без споменаване: ${missed.slice(0, 6).join(' | ')}.` : '',
+        failed.length
+          ? `Двигатели, които не отговориха: ${[...new Set(failed.map((c) => `${c.engine} (${c.error})`))].slice(0, 4).join('; ')}. ` +
+            'Те не са броени за нула — просто не са питани.'
+          : '',
+      ].filter(Boolean).join('\n');
 
       return { summary, data: run, kind: 'visibility' };
     },

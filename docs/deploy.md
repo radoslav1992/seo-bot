@@ -45,11 +45,11 @@ Worker → **Settings** → **Variables and Secrets** → тип **Secret**.
 |---|---|---|
 | `SESSION_SECRET` | да | Подписва бисквитките за вход. Без него входът връща 503. |
 | `TOKEN_ENC_KEY` | да | Шифрова Google refresh токените в базата. Без него връзката с Google е изключена. |
+| `CLOUDFLARE_API_TOKEN` | **да, за видимостта** | AI Gateway. С него наведнъж работят ChatGPT, Claude, Grok и Qwen — без техните ключове. Без него видимост НЕ се мери. |
 | `GOOGLE_CLIENT_ID` | за GSC/GA | OAuth клиент |
 | `GOOGLE_CLIENT_SECRET` | за GSC/GA | същият клиент |
-| `OPENAI_API_KEY` | не | само ако искаш и живия ChatGPT като двигател |
-| `PERPLEXITY_API_KEY` | не | същото за Perplexity |
-| `GEMINI_API_KEY` | не | същото за Gemini |
+| `GEMINI_API_KEY` | не | Gemini като двигател (Gateway още не проксира търсенето на Google) |
+| `PERPLEXITY_API_KEY` | не | Perplexity като двигател |
 
 Стойностите да са дълги случайни низове:
 
@@ -64,7 +64,26 @@ openssl rand -base64 48
 Секретите се задават **веднъж** и преживяват деплоите — за разлика от
 `vars`, които идват от `wrangler.jsonc` при всяко качване.
 
-## 4. Домейнът
+## 4. AI Gateway — без него няма видимост
+
+Двигателите с живо търсене минават през Cloudflare AI Gateway. Това е и
+причината да не са нужни ключове за OpenAI, Anthropic, xAI и Alibaba: с
+**Unified Billing** те се плащат от сметката в Cloudflare.
+
+1. Dashboard → **AI** → **AI Gateway** → Create gateway. Името впиши в
+   `AI_GATEWAY_ID` в `wrangler.jsonc` (по подразбиране `seo-bot`).
+2. Включи **Unified Billing** за gateway-а и зареди кредит. Cloudflare взема
+   5% такса върху заредената сума.
+3. Впиши идентификатора на акаунта в `CLOUDFLARE_ACCOUNT_ID` в
+   `wrangler.jsonc` (не е тайна — адрес е, не ключ).
+4. Създай API токен с права за AI Gateway и го подай като секрет
+   `CLOUDFLARE_API_TOKEN`.
+
+Пропуснеш ли това, приложението работи, но мери само „познатост“ (какво
+моделите знаят наизуст), а таблото го казва изрично вместо да показва нула.
+Подробности: [docs/models.md](models.md).
+
+## 5. Домейнът
 
 Worker → **Settings** → **Domains & Routes** → Add custom domain.
 
@@ -72,7 +91,7 @@ Worker → **Settings** → **Domains & Routes** → Add custom domain.
 защото от тях се смятат каноничните адреси, sitemap-ът и — важното — адресът
 за връщане на Google OAuth.
 
-## 5. Google Search Console и Analytics
+## 6. Google Search Console и Analytics
 
 1. В [Google Cloud Console](https://console.cloud.google.com/) създай проект.
 2. Включи **Google Search Console API**, **Google Analytics Data API** и
@@ -91,7 +110,7 @@ Worker → **Settings** → **Domains & Routes** → Add custom domain.
 Докато екранът за съгласие е в режим „Testing“, само изрично добавените
 тестови потребители могат да свържат акаунт.
 
-## 6. Проверката след първия деплой
+## 7. Проверката след първия деплой
 
 ```bash
 curl -s https://ТВОЯТ-ДОМЕЙН/ -o /dev/null -w '%{http_code}\n'          # 200
@@ -102,11 +121,10 @@ curl -s https://ТВОЯТ-ДОМЕЙН/api/chats -w '\n%{http_code}\n'         
 После, в браузъра:
 
 1. Регистрирай акаунт и добави домейн.
-2. **Табло → Двигатели → „Провери моделите“.** Това е задължителната стъпка:
-   каталогът на Workers AI се мени и вчерашният идентификатор може да е
-   изчезнал. Не отговори ли модел — поправи `VISIBILITY_ENGINES` или
-   `CHAT_MODEL` в `wrangler.jsonc` и бутни. Подробностите са в
-   [docs/models.md](models.md).
+2. **Табло → Двигатели → „Провери моделите“.** Задължителната стъпка. Гледай
+   реда „N/M двигателя **с търсене** отговарят“ — само те мерят видимост.
+   Не отговори ли модел, поправи `VISIBILITY_ENGINES` или `CHAT_MODEL` в
+   `wrangler.jsonc` и бутни. Подробностите са в [docs/models.md](models.md).
 3. „Нова проверка“ — първата отнема около минута.
 
 ## Локална разработка

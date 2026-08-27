@@ -457,6 +457,7 @@ export interface VisibilityRow {
   position: number | null;
   competitors: string;
   excerpt: string;
+  grounded: number;
   created_utc: number;
 }
 
@@ -471,6 +472,7 @@ export async function saveVisibility(
     position: number | null;
     competitors: string[];
     excerpt: string;
+    grounded: boolean;
   }[],
 ): Promise<void> {
   if (checks.length === 0) return;
@@ -479,11 +481,13 @@ export async function saveVisibility(
     checks.map((check) =>
       db
         .prepare(
-          `INSERT INTO visibility_checks (id, user_id, domain_id, query, engine, mentioned, position, competitors, excerpt, created_utc)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO visibility_checks
+             (id, user_id, domain_id, query, engine, mentioned, position, competitors, excerpt, grounded, created_utc)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(randomId(), userId, domainId, check.query.slice(0, 300), check.engine,
-          check.mentioned ? 1 : 0, check.position, check.competitors.join(','), check.excerpt.slice(0, 800), now),
+          check.mentioned ? 1 : 0, check.position, check.competitors.join(','), check.excerpt.slice(0, 800),
+          check.grounded ? 1 : 0, now),
     ),
   );
 }

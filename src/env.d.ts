@@ -57,6 +57,17 @@ interface Env {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
 
+  /**
+   * Cloudflare AI Gateway — през него минават двигателите С ЖИВО ТЪРСЕНЕ.
+   *
+   * С Unified Billing тук е достатъчен само токенът за Cloudflare: ключове
+   * за OpenAI, Anthropic, xAI и Alibaba НЕ са нужни, а сметката е една.
+   */
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  /** Кой gateway да брои заявките. Липсва ли — подразбиращият се. */
+  AI_GATEWAY_ID?: string;
+
   PUBLIC_SITE_URL?: string;
   /** Моделът за чата и инструментите. Трябва да поддържа tool calling. */
   CHAT_MODEL?: string;
@@ -69,12 +80,12 @@ interface Env {
   VISIBILITY_ENGINES?: string;
 
   /**
-   * По избор: живите двигатели покрай моделите на Cloudflare. Липсва ли
-   * ключът, двигателят се показва като „не отговаря“ и не се подменя с друг.
+   * По избор — само за двигателите, които AI Gateway още не покрива с
+   * търсене. Липсва ли ключът, двигателят се показва като „не отговаря“ и
+   * не се подменя мълчаливо с друг.
    */
-  OPENAI_API_KEY?: string;
-  PERPLEXITY_API_KEY?: string;
   GEMINI_API_KEY?: string;
+  PERPLEXITY_API_KEY?: string;
 }
 
 type Runtime = import('@astrojs/cloudflare').Runtime<Env>;
