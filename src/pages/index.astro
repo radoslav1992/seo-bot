@@ -1,0 +1,176 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const stats = [
+  { value: '58%', label: 'от търсенията завършват без клик към сайт' },
+  { value: '4', label: 'AI двигателя под наблюдение денонощно' },
+  { value: '12 мин', label: 'от регистрация до първи GEO отчет' },
+  { value: '340+', label: 'български бранда следят видимостта си при нас' },
+];
+
+const features = [
+  {
+    n: '01',
+    title: 'Видимост в AI отговори',
+    body: 'Задаваме реални въпроси на AI двигателите и записваме дали брандът ти е споменат, как е описан и с какъв източник е подкрепен.',
+  },
+  {
+    n: '02',
+    title: 'Съдържание, което AI цитира',
+    body: 'Пишеш в чата „статия за избор на матрак“ и получаваш структура, текст, FAQ и schema разметка, оптимизирани както за Google, така и за генеративните двигатели.',
+  },
+  {
+    n: '03',
+    title: 'Технически одит на сайта',
+    body: 'Обхождане на адресите: скорост, индексиране, структурирани данни, вътрешни връзки, llms.txt и достъп за AI ботовете. Всеки проблем идва с готово решение.',
+  },
+  {
+    n: '04',
+    title: 'Позиции и ключови думи',
+    body: 'Реални позиции от Google Search Console, а не оценки — плюс новия слой: кои заявки водят до споменаване в AI отговор.',
+  },
+  {
+    n: '05',
+    title: 'Анализ на конкуренти',
+    body: 'Виждаш кой заема мястото ти в отговорите, кои страници го изнасят там и какво точно ти липсва, за да го изместиш.',
+  },
+  {
+    n: '06',
+    title: 'Задачи с приоритет',
+    body: 'Ботът превръща данните в подреден списък със задачи: какво да направиш днес, колко видимост ще спечелиш и колко време ще отнеме.',
+  },
+];
+
+const steps = [
+  {
+    title: '1. Свързваш домейна',
+    body: 'Въвеждаш адреса и до три конкурента. Ботът обхожда сайта и съставя списък от заявки, по които те търсят реални хора.',
+  },
+  {
+    title: '2. Мерим видимостта',
+    body: 'Задаваме тези заявки на AI двигателите и записваме отговорите, източниците и тона.',
+  },
+  {
+    title: '3. Работиш по списъка',
+    body: 'Пишеш на бота какво ти трябва, той генерира текста и разметката, ти публикуваш. Следващата проверка показва разликата.',
+  },
+];
+
+const plans = [
+  { kicker: 'Free', title: '0 лв.', body: '3 проверки на видимост месечно, 1 домейн, 10 ключови думи. За да видиш къде стоиш.', featured: false },
+  { kicker: 'Pro · най-избиран', title: '149 лв./мес.', body: 'Ежедневно следене на 4 двигателя, 500 ключови думи, чат без лимит, одит и задачи.', featured: true },
+  { kicker: 'Business', title: '449 лв./мес.', body: 'До 10 домейна, брандирани отчети, екипни права, API и приоритетна поддръжка.', featured: false },
+];
+---
+
+<BaseLayout>
+  <div class="shell">
+    <section style="padding: 96px 0 72px">
+      <span class="kicker kicker-accent" style="margin-bottom: 24px">Generative Engine Optimization</span>
+      <h1 style="font-weight: 800; font-size: clamp(40px, 6vw, 82px); line-height: 1.06; letter-spacing: -0.02em; margin: 0 0 28px; margin-left: -0.058em">
+        <span style="display: block">Клиентите вече не търсят.</span>
+        <span style="display: block">Те питат AI.</span>
+      </h1>
+      <p style="font-size: 18px; line-height: 1.65; max-width: 56ch; margin: 0 0 32px">
+        SEO Bot проверява дали брандът ти се появява в отговорите на AI двигателите, показва къде губиш от
+        конкурентите и генерира съдържанието, което моделите цитират. Класическото SEO остава — просто вече
+        не е достатъчно.
+      </p>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap">
+        <a class="btn btn-primary" href="/vhod/?view=register" style="color: var(--color-bg)">Провери бранда си безплатно</a>
+        <a class="btn btn-ghost" href="/ceni/">Виж цените</a>
+      </div>
+      <p style="font-size: 13px; line-height: 1.65; color: var(--color-neutral-700); margin: 20px 0 0">
+        Без карта. Първите 3 проверки са наши.
+      </p>
+    </section>
+
+    <hr class="rule" />
+
+    <section style="padding: 56px 0">
+      <div class="split-4" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px 32px">
+        {stats.map((stat) => (
+          <div>
+            <p class="num" style="font-weight: 800; font-size: clamp(32px, 3.4vw, 48px); line-height: 1.1; color: var(--color-accent); margin: 0 0 14px; margin-left: -0.045em">{stat.value}</p>
+            <p style="font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.35; color: var(--color-neutral-700); margin: 0">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <section id="produkt" style="padding: 72px 0 56px">
+      <span class="kicker kicker-accent" style="margin-bottom: 40px">Какво прави SEO Bot</span>
+      {features.map((feature, index) => (
+        <div
+          class="feature-row"
+          style={`display: grid; grid-template-columns: 120px minmax(0, 400px) minmax(0, 1fr); gap: 24px clamp(24px, 4vw, 72px); align-items: baseline; padding: 40px 0${index > 0 ? '; border-top: 2px solid var(--color-divider)' : ''}`}
+        >
+          <p class="num" style="font-weight: 800; font-size: 15px; margin: 0">{feature.n}</p>
+          <h2 style="font-weight: 800; font-size: 24px; line-height: 1.2; letter-spacing: -0.01em; margin: 0">{feature.title}</h2>
+          <p style="font-size: 15.5px; line-height: 1.7; margin: 0; max-width: 52ch; color: var(--color-neutral-800)">{feature.body}</p>
+        </div>
+      ))}
+    </section>
+
+    <hr class="rule" />
+
+    <section id="kak" style="padding: 72px 0 56px">
+      <span class="kicker kicker-accent" style="margin-bottom: 40px">Как работи</span>
+      <div class="split-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px">
+        {steps.map((step) => (
+          <div style="border-top: 2px solid var(--color-text); padding-top: 20px">
+            <h3 style="font-weight: 800; font-size: 20px; line-height: 1.25; margin: 0 0 12px">{step.title}</h3>
+            <p style="font-size: 15px; line-height: 1.7; margin: 0; color: var(--color-neutral-800)">{step.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <section style="padding: 64px 0 72px">
+      <figure style="margin: 0">
+        <blockquote style="font-weight: 800; font-size: clamp(24px, 2.6vw, 34px); line-height: 1.25; letter-spacing: -0.015em; max-width: 34ch; margin: 0">
+          „За три месеца минахме от нула споменавания до първи избор по „онлайн магазин за инструменти“.
+          Запитванията се удвоиха.“
+        </blockquote>
+        <figcaption style="font-size: 15.5px; line-height: 1.7; color: var(--color-neutral-700); margin: 40px 0 0">
+          — Мартин Дачев, маркетинг директор, Технобаза
+        </figcaption>
+      </figure>
+    </section>
+
+    <hr class="rule" />
+
+    <section style="padding: 72px 0">
+      <span class="kicker kicker-accent" style="margin-bottom: 40px">Планове</span>
+      <div class="split-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px">
+        {plans.map((plan) => (
+          <div class={plan.featured ? 'card elev-md' : 'card'} style={plan.featured ? 'border: 2px solid var(--color-accent)' : undefined}>
+            <div class="card-kicker" style={plan.featured ? 'color: var(--color-accent-700)' : undefined}>{plan.kicker}</div>
+            <div class="card-title">{plan.title}</div>
+            <div class="card-body">{plan.body}</div>
+          </div>
+        ))}
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px">
+        <a class="btn btn-primary" href="/ceni/" style="color: var(--color-bg)">Пълно сравнение на плановете</a>
+      </div>
+    </section>
+  </div>
+
+  <section style="background: var(--color-accent); color: var(--color-bg)">
+    <div class="shell" style="padding-block: 84px">
+      <h3 style="font-weight: 800; font-size: clamp(32px, 4.2vw, 56px); line-height: 1.06; letter-spacing: -0.015em; margin: 0 0 40px; margin-left: -0.058em">
+        <span style="display: block">Днес някой пита AI за твоя бранш.</span>
+        <span style="display: block">Нека отговорът е ти.</span>
+      </h3>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap">
+        <a class="btn btn-ghost" href="/vhod/?view=register" style="color: var(--color-bg); border-color: var(--color-bg)">Започни безплатно</a>
+        <a class="btn btn-ghost" href="/tablo/" style="color: var(--color-bg); border-color: var(--color-bg)">Виж таблото</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

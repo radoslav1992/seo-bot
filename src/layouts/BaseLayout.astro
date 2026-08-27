@@ -1,0 +1,55 @@
+---
+/**
+ * Обвивката на публичните страници: начало, цени, правно.
+ *
+ * Шрифтът се тегли от Google Fonts със `display=swap` — текстът се вижда
+ * веднага с резервния шрифт, вместо страницата да мълчи, докато файлът пътува.
+ */
+import '../styles/global.css';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import { SITE } from '../data/site.mjs';
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** Правните и приложните страници не искат покана от търсачките. */
+  noindex?: boolean;
+  current?: string;
+}
+
+const { title, description = SITE.description, noindex = false, current } = Astro.props;
+const pageTitle = title ? `${title} — ${SITE.name}` : `${SITE.name} — SEO и GEO видимост за български бизнес`;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin);
+---
+
+<!doctype html>
+<html lang="bg">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.href} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.href} />
+    <meta property="og:locale" content="bg_BG" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Към съдържанието</a>
+    <Nav current={current} />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

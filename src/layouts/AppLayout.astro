@@ -1,0 +1,127 @@
+---
+/**
+ * Обвивката на приложението: странична лента вляво, съдържание вдясно.
+ *
+ * Страниците, които я ползват, вече са проверили, че има влязъл потребител —
+ * тук той е задължителен, за да не се рисува лента с кредити на никого.
+ */
+import '../styles/global.css';
+import type { SessionUser } from '../lib/auth';
+import { PLANS } from '../lib/db';
+
+interface Props {
+  title: string;
+  user: SessionUser;
+  current: 'tablo' | 'chat';
+  /** Чатът се разлива до ръба на прозореца; таблото се скролва нормално. */
+  fullHeight?: boolean;
+  /**
+   * Ширина на лентата. Чатът иска повече място за заглавията на разговорите.
+   */
+  asideWidth?: string;
+}
+
+const { title, user, current, fullHeight = false, asideWidth = '236px' } = Astro.props;
+
+/*
+ * Чатът заменя навигацията със списъка на разговорите (слотът `aside`), но
+ * запазва марката, кредитите и изхода. Две ленти една до друга — както
+ * излизаше преди — изяждаха 500 пиксела от 1280 и оставяха на отговора
+ * по-малко място, отколкото на менюто.
+ */
+const hasCustomAside = Astro.slots.has('aside');
+
+const used = Math.max(0, user.creditsLimit - user.credits);
+const percent = user.creditsLimit > 0 ? Math.round((user.credits / user.creditsLimit) * 100) : 0;
+const planLabel = PLANS[user.plan].label;
+const renews = user.renewsUtc
+  ? new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long' }).format(new Date(user.renewsUtc))
+  : null;
+
+const nav = [
+  { href: '/tablo/', label: 'Табло', id: 'tablo' },
+  { href: '/chat/', label: 'Чат с бота', id: 'chat' },
+  { href: '/tablo/#klasacii', label: 'Класации', id: 'klasacii' },
+  { href: '/tablo/#konkurenti', label: 'Конкуренти', id: 'konkurenti' },
+  { href: '/tablo/#odit', label: 'Одит на сайта', id: 'odit' },
+  { href: '/tablo/#zadachi', label: 'Задачи', id: 'zadachi' },
+  { href: '/tablo/#istoria', label: 'История на чатове', id: 'istoria' },
+];
+---
+
+<!doctype html>
+<html lang="bg">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} — SEO BOT</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Към съдържанието</a>
+    <div
+      class="app-shell"
+      style={`display: grid; grid-template-columns: ${asideWidth} minmax(0, 1fr); ${fullHeight ? 'height: 100vh' : 'min-height: 100vh'}`}
+    >
+      <aside
+        class="app-aside"
+        style="border-right: 2px solid var(--color-divider); padding: 24px 20px; display: flex; flex-direction: column; gap: 24px; position: sticky; top: 0; height: 100vh; box-sizing: border-box; min-height: 0"
+      >
+        <a href="/" style="font-weight: 800; font-size: 18px; letter-spacing: 0.04em; color: var(--color-text)">SEO BOT</a>
+
+        {hasCustomAside ? (
+          <slot name="aside" />
+        ) : (
+          <nav style="display: grid; gap: 2px">
+            {nav.map((item) => (
+              <a
+                href={item.href}
+                style={
+                  item.id === current
+                    ? 'font-size: 15px; padding: 8px 10px; background: var(--color-accent); color: var(--color-bg); font-weight: 600'
+                    : 'font-size: 15px; padding: 8px 10px; color: var(--color-text)'
+                }
+              >{item.label}</a>
+            ))}
+          </nav>
+        )}
+
+        <div style="margin-top: auto; border-top: 2px solid var(--color-divider); padding-top: 20px">
+          {hasCustomAside && (
+            <nav style="display: grid; gap: 6px; font-size: 14px; margin-bottom: 16px">
+              <a href="/tablo/">Табло</a>
+              <a href="/ceni/">Планове и кредити</a>
+            </nav>
+          )}
+          <p style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0 0 10px">
+            Кредити · {planLabel}
+          </p>
+          <p class="num" style="font-weight: 800; font-size: 22px; margin: 0 0 8px">
+            {user.credits.toLocaleString('bg-BG')}
+            <span style="font-size: 13px; font-weight: 400; color: var(--color-neutral-700)">
+              / {user.creditsLimit.toLocaleString('bg-BG')}
+            </span>
+          </p>
+          <div style="height: 8px; background: var(--color-neutral-300)">
+            <div style={`width: ${percent}%; height: 100%; background: var(--color-accent)`}></div>
+          </div>
+          <p style="font-size: 12.5px; line-height: 1.6; color: var(--color-neutral-700); margin: 10px 0 12px">
+            {renews ? `Подновяване на ${renews}` : `Изразходвани ${used.toLocaleString('bg-BG')} кредита`}
+          </p>
+          <a class="btn btn-ghost btn-block" href="/ceni/" style="font-size: 13px">Добави кредити</a>
+          <form method="post" action="/api/auth/logout" style="margin-top: 4px">
+            <button type="submit" class="btn btn-ghost btn-block" style="font-size: 13px; color: var(--color-neutral-700)">
+              Излез
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      <main id="main" style="min-width: 0; display: flex; flex-direction: column; min-height: 0">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

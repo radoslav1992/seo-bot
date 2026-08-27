@@ -1,0 +1,62 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "seo-bot",
+  "main": "./dist/_worker.js/index.js",
+  "compatibility_date": "2025-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Cloudflare Workers сервира и статиката: целият пререндериран сайт се
+  // качва като Worker assets, а Worker-ът се събужда само за `/api/*` и за
+  // страниците с `prerender = false`.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+
+  "observability": { "enabled": true },
+
+  // Workers AI — моделите, с които говори ботът и с които мери видимостта.
+  // Без ключ и без външен доставчик: сметката е на акаунта в Cloudflare.
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Данните: потребители, домейни, чатове, одити, задачи.
+  //
+  // `database_id` не е тайна — той е адрес, не ключ. Създаването на базата и
+  // прилагането на миграциите са описани в docs/deploy.md.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "seo-bot",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Кеш за резултати от одити и проверки на видимост — за да не плаща
+  // потребителят кредит за отговор, който вече е изчислен преди минута.
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+
+  "vars": {
+    // Адресът, на който Google връща OAuth потока. Трябва да съвпада точно с
+    // „Authorized redirect URI“ в Google Cloud Console.
+    "PUBLIC_SITE_URL": "https://seobot.bg",
+    // Моделът за чата. Смяната му е една променлива, не разписване на код.
+    "CHAT_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    // По-малък и по-бърз модел за помощните задачи (заглавия на чатове,
+    // класифициране на отговор) — не всяка задача заслужава 70B.
+    "FAST_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast"
+  }
+
+  // Секрети (`wrangler secret put`), нарочно НЕ в този файл:
+  //   SESSION_SECRET       — подписва бисквитките за вход
+  //   TOKEN_ENC_KEY        — шифрова Google refresh токените в D1
+  //   GOOGLE_CLIENT_ID     — OAuth клиент за Search Console и Analytics
+  //   GOOGLE_CLIENT_SECRET — същият клиент
+}

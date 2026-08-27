@@ -1,0 +1,33 @@
+---
+/** Подвалът на публичните страници — четирите колони от дизайна. */
+import { SITE } from '../data/site.mjs';
+const year = 2026;
+---
+
+<div class="shell">
+  <footer style="padding: 56px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; font-size: 14px; line-height: 1.8" class="split-4">
+    <div>
+      <p style="font-weight: 800; letter-spacing: 0.04em; margin: 0 0 12px">SEO BOT</p>
+      <p style="margin: 0; color: var(--color-neutral-700)">SEO и GEO видимост за български бизнес.</p>
+    </div>
+    <div style="display: grid; gap: 4px; align-content: start">
+      <a href="/">Начало</a>
+      <a href="/ceni/">Цени</a>
+      <a href="/tablo/">Табло</a>
+      <a href="/chat/">Чат</a>
+    </div>
+    <div style="display: grid; gap: 4px; align-content: start">
+      <a href="/pravno/#terms">Общи условия</a>
+      <a href="/pravno/#privacy">Поверителност</a>
+      <a href="/pravno/#cookies">Бисквитки</a>
+    </div>
+    <div style="display: grid; gap: 4px; align-content: start">
+      <a href="/pravno/#refund">Възстановяване</a>
+      <a href="/pravno/#dpa">Обработка на данни</a>
+      <a href="/pravno/#contact">Контакти</a>
+    </div>
+  </footer>
+  <p style="border-top: 2px solid var(--color-divider); padding: 20px 0 40px; margin: 0; font-size: 13.5px; color: var(--color-neutral-700)">
+    © {year} {SITE.company.legalName} · ЕИК {SITE.company.eik}
+  </p>
+</div>
