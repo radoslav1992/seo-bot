@@ -29,12 +29,6 @@ interface D1Database {
   batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
-interface KVNamespace {
-  get(key: string, type?: 'text'): Promise<string | null>;
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
-  delete(key: string): Promise<void>;
-}
-
 /** Workers AI. `run` връща обект или поток според `stream`. */
 interface AiBinding {
   run(model: string, input: Record<string, unknown>): Promise<unknown>;
@@ -45,8 +39,6 @@ interface Env {
   AI?: AiBinding;
   /** Данните. Bound in wrangler.jsonc → `d1_databases`. */
   DB?: D1Database;
-  /** Кеш за одити и проверки. Липсва ли, всичко работи, просто по-бавно. */
-  CACHE?: KVNamespace;
   /** Статичният билд — позволява на Worker-а да анализира собствените си страници. */
   ASSETS?: AssetsBinding;
 

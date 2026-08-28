@@ -14,11 +14,10 @@ Cloudflare следи хранилището и строи сам при вся�
 
 ```bash
 npx wrangler d1 create seo-bot
-npx wrangler kv namespace create CACHE   # по избор — липсва ли, всичко работи, просто по-бавно
 ```
 
-И двете команди изписват идентификатор. Впиши ги в `wrangler.jsonc` на
-мястото на нулите и бутни промяната. Това не са тайни, а адреси, и стоят в
+Командата изписва идентификатор. Впиши го в `wrangler.jsonc` на мястото на
+нулите и бутни промяната. Това не са тайни, а адреси, и стоят в
 хранилището точно защото Cloudflare строи оттук: връзка, добавена ръчно от
 таблото, се затрива при следващия деплой.
 
@@ -27,13 +26,12 @@ npx wrangler kv namespace create CACHE   # по избор — липсва ли
 | В `wrangler.jsonc` | Сега | Откъде |
 |---|---|---|
 | `d1_databases[0].database_id` | нули | `wrangler d1 create seo-bot` |
-| `kv_namespaces[0].id` | нули | `wrangler kv namespace create CACHE` |
-| `vars.CLOUDFLARE_ACCOUNT_ID` | празно | таблото → десния панел, или `wrangler whoami` |
+| `vars.CLOUDFLARE_ACCOUNT_ID` | празно | `wrangler whoami`, или таблото → десния панел |
 | `vars.PUBLIC_SITE_URL` | `https://seobot.bg` | твоят домейн (стъпка 5) |
 | `vars.AI_GATEWAY_ID` | `seo-bot` | името на gateway-а (стъпка 4) |
 
-Не искаш ли кеша, махни целия блок `kv_namespaces` — оставен с нули той чупи
-деплоя точно както и базата.
+Само първите два спират деплоя. Другите два се оправят, след като има домейн
+и gateway.
 
 Workers AI не иска създаване — `"ai": { "binding": "AI" }` е достатъчно.
 
@@ -51,7 +49,7 @@ Cloudflare Dashboard → **Workers & Pages** → **Create** → **Import a repos
 
 `deploy:cf` пуска миграциите на D1 **преди** качването и чак после деплойва —
 за да не посрещне новият код стара схема. Първият билд ще се провали, ако
-`database_id` или идентификаторът на KV още са нули; това е нарочно шумно.
+`database_id` още е нули; това е нарочно шумно.
 
 > **`name` в `wrangler.jsonc` трябва да съвпада с името на Worker-а.** Сега е
 > `seo-bot`. Създаде ли Cloudflare Worker с друго име, изравни ги. Разминаване
@@ -161,7 +159,7 @@ curl -s https://ТВОЯТ-ДОМЕЙН/api/chats -w '\n%{http_code}\n'         
 npm install
 npm run db:migrate:local
 npm run dev        # Astro dev сървър — бърз, без Cloudflare binding-и
-npm run preview    # wrangler dev — истинският Worker с D1 и KV
+npm run preview    # wrangler dev — истинският Worker с D1
 ```
 
 Секретите за локално отиват в `.dev.vars` (в `.gitignore`):
