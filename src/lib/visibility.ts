@@ -268,8 +268,11 @@ async function callGateway({ env, engine, path, body }: GatewayCall): Promise<
     headers: {
       Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
       'Content-Type': 'application/json',
-      // Кой gateway да брои заявката. Без него Cloudflare ползва подразбиращия се.
-      ...(env.AI_GATEWAY_ID ? { 'cf-aig-metadata': JSON.stringify({ gateway: env.AI_GATEWAY_ID }) } : {}),
+      // Кой gateway да брои заявката. Без него Cloudflare ползва
+      // подразбиращия се за акаунта — работи, но кешът, лимитите и дневникът
+      // на нашия gateway не се прилагат и заявките не се виждат в неговите
+      // отчети.
+      ...(env.AI_GATEWAY_ID ? { 'cf-aig-gateway-id': env.AI_GATEWAY_ID } : {}),
     },
     body: JSON.stringify({ model: engine.model, ...body }),
     signal: AbortSignal.timeout(ASK_TIMEOUT_MS),

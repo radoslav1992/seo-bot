@@ -27,9 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Версията идва от `.node-version` — същия файл, който чете и
+      # Cloudflare Workers Builds. Разминат ли се, тази проверка тества нещо
+      # различно от това, което се качва.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
 
       - run: npm ci

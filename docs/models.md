@@ -55,9 +55,13 @@
 | `CLOUDFLARE_ACCOUNT_ID` | Адресът на AI Gateway | — |
 | `AI_GATEWAY_ID` | Кой gateway да брои заявките | — |
 
-Плюс секрета `CLOUDFLARE_API_TOKEN`. **Той е един за всички gateway
-двигатели** — с него наведнъж работят ChatGPT, Claude, Grok и Qwen, и няма
-четири ключа за въртене.
+Плюс секрета `CLOUDFLARE_API_TOKEN` с право **`Account` → `Workers AI` →
+`Read`** (не „AI Gateway“ — токен само с него връща 401). **Той е един за
+всички gateway двигатели** — с него наведнъж работят ChatGPT, Claude, Grok и
+Qwen, и няма четири ключа за въртене.
+
+Кой gateway брои заявката се задава с заглавката `cf-aig-gateway-id`; без нея
+Cloudflare ползва подразбиращия се за акаунта.
 
 `VISIBILITY_ENGINES` е JSON масив, вписан като низ:
 
