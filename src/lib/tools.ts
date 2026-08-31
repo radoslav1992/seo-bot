@@ -24,8 +24,8 @@ import {
   keywordIdeas, schemaScriptTag, SCHEMA_KINDS, validateSchemaObject, type SchemaKind,
 } from './generators';
 import {
-  accessTokenFor, daysAgo, ga4AiTraffic, ga4ListProperties, ga4RunReport,
-  gscInspectUrl, gscListSites, gscSearchAnalytics,
+  accessTokenFor, analyticsEnabled, daysAgo, ga4AiTraffic, ga4ListProperties, ga4RunReport,
+  gscCompare, gscInspectUrl, gscListSites, gscSearchAnalytics,
 } from './google';
 import type { SessionUser } from './auth';
 import { availableEngines, runVisibilityCheck, suggestQueries } from './visibility';
@@ -110,8 +110,12 @@ function gscSiteFor(domain: DomainRow | null): string | null {
 async function requireGoogle(context: ToolContext): Promise<string> {
   const token = await accessTokenFor(context.db, context.env, context.requestUrl, context.user.id);
   if (!token) {
+    // Съобщението назовава само това, което инсталацията наистина иска —
+    // обещан Analytics, който не е поискан в обхватите, праща потребителя да
+    // търси настройка, каквато няма.
+    const what = analyticsEnabled(context.env) ? 'Search Console и Analytics' : 'Search Console';
     throw new ToolError(
-      'Няма връзка с Google. Свържи Search Console и Analytics от таблото → „Свържи Google“, за да мога да чета реални данни.',
+      `Няма връзка с Google. Свържи ${what} от таблото → „Свържи Google“, за да мога да чета реални данни.`,
     );
   }
   return token;
@@ -390,6 +394,157 @@ export const TOOLS: Record<string, ToolDefinition> = {
       ].join('\n');
 
       return { summary, data: { site, dimension, days, rows }, kind: 'gsc' };
+    },
+  },
+
+  gsc_compare: {
+    credits: 2,
+    running: 'Сравнявам двата периода…',
+    schema: {
+      name: 'gsc_compare',
+      description:
+        'Сравнява последните N дни със същия брой дни преди тях в Search Console и връща какво се е ' +
+        'променило: кои заявки или страници печелят и губят кликове, кои са нови и кои са изчезнали. ' +
+        'ТОВА е инструментът за „какво се промени“, „защо паднахме“, „защо се вдигнахме“ — не ' +
+        'gsc_top_queries, който показва само моментна снимка.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'Дължина на всеки от двата периода в дни (по подразбиране 28).' },
+          dimension: { type: 'string', description: '"query" (по подразбиране), "page", "country" или "device".' },
+          limit: { type: 'number', description: 'Колко печеливши и колко губещи да върне (по подразбиране 10).' },
+        },
+      },
+    },
+    async run(args, context) {
+      const token = await requireGoogle(context);
+      const site = gscSiteFor(context.domain);
+      if (!site) throw new ToolError('Няма зададен домейн в акаунта.');
+
+      const dimension = ['query', 'page', 'country', 'device'].includes(str(args.dimension))
+        ? (str(args.dimension) as 'query' | 'page' | 'country' | 'device')
+        : 'query';
+      const days = Math.max(3, Math.min(num(args.days, 28), 120));
+      const limit = Math.max(3, Math.min(num(args.limit, 10), 25));
+
+      const { deltas, period } = await gscCompare(token, { siteUrl: site, dimension, days });
+      if (deltas.length === 0) {
+        return { summary: `Search Console не върна данни за ${site}.`, kind: 'gsc' };
+      }
+
+      const totals = deltas.reduce(
+        (acc, row) => ({
+          clicks: acc.clicks + row.clicks,
+          clicksPrev: acc.clicksPrev + row.clicksPrev,
+          impressions: acc.impressions + row.impressions,
+          impressionsPrev: acc.impressionsPrev + row.impressionsPrev,
+        }),
+        { clicks: 0, clicksPrev: 0, impressions: 0, impressionsPrev: 0 },
+      );
+      const change = totals.clicksPrev > 0
+        ? Math.round(((totals.clicks - totals.clicksPrev) / totals.clicksPrev) * 100)
+        : null;
+
+      const byDelta = [...deltas].sort((a, b) => b.clicksDelta - a.clicksDelta);
+      const winners = byDelta.filter((row) => row.clicksDelta > 0).slice(0, limit);
+      const losers = byDelta.filter((row) => row.clicksDelta < 0).reverse().slice(0, limit);
+
+      const line = (row: (typeof deltas)[number]): string =>
+        `${row.key} — ${row.clicksPrev} → ${row.clicks} клика (${row.clicksDelta > 0 ? '+' : ''}${row.clicksDelta})` +
+        (row.state === 'both' && row.positionPrev
+          ? `, позиция ${row.positionPrev.toFixed(1)} → ${row.position.toFixed(1)}`
+          : row.state === 'new' ? ', НОВА' : ', ИЗЧЕЗНА');
+
+      const summary = [
+        `Search Console (${site}), по ${dimension}.`,
+        `Период: ${period.from}…${period.to} срещу ${period.prevFrom}…${period.prevTo}.`,
+        `Общо: ${totals.clicksPrev} → ${totals.clicks} клика` +
+          (change === null ? '' : ` (${change > 0 ? '+' : ''}${change}%)`) +
+          `, ${totals.impressionsPrev} → ${totals.impressions} импресии.`,
+        winners.length ? `Печелят:\n${winners.map(line).join('\n')}` : 'Нищо не печели осезаемо.',
+        losers.length ? `Губят:\n${losers.map(line).join('\n')}` : 'Нищо не губи осезаемо.',
+        'Обясни на потребителя КАКВО се е случило и защо може да се е случило, ' +
+          'после какво да направи. Не преписвай таблицата.',
+      ].join('\n');
+
+      return { summary, data: { site, dimension, days, period, totals, winners, losers }, kind: 'gsc' };
+    },
+  },
+
+  gsc_opportunities: {
+    credits: 2,
+    running: 'Търся бързите победи…',
+    schema: {
+      name: 'gsc_opportunities',
+      description:
+        'Намира бързите победи в Search Console: заявки на прага на първа страница (позиция 5–20 с ' +
+        'реални импресии) и страници с много импресии, но нисък CTR. Ползвай го при „какво да оправя ' +
+        'първо“, „къде сме близо до топ 10“, „кои заглавия не работят“.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'Период назад в дни (по подразбиране 28).' },
+          limit: { type: 'number', description: 'Колко възможности от вид (по подразбиране 10).' },
+        },
+      },
+    },
+    async run(args, context) {
+      const token = await requireGoogle(context);
+      const site = gscSiteFor(context.domain);
+      if (!site) throw new ToolError('Няма зададен домейн в акаунта.');
+
+      const days = Math.max(7, Math.min(num(args.days, 28), 120));
+      const limit = Math.max(3, Math.min(num(args.limit, 10), 25));
+      const rows = await gscSearchAnalytics(token, {
+        siteUrl: site,
+        startDate: daysAgo(days + 3),
+        endDate: daysAgo(3),
+        dimensions: ['query'],
+        rowLimit: 500,
+      });
+      if (rows.length === 0) return { summary: `Search Console не върна данни за ${site}.`, kind: 'gsc' };
+
+      /*
+       * Прагът е позиция 5–20 с поне 20 импресии.
+       *
+       * Под 5 вече си горе и печалбата е малка; над 20 не е „бърза победа“, а
+       * нова работа. Импресиите са долна граница, за да не изплуват заявки,
+       * които просто никой не търси — там движението е шум.
+       */
+      const striking = rows
+        .filter((row) => row.position >= 5 && row.position <= 20 && row.impressions >= 20)
+        .sort((a, b) => b.impressions - a.impressions)
+        .slice(0, limit);
+
+      // Много показвания, малко кликове при прилична позиция: заглавието и
+      // описанието не убеждават — най-евтината поправка в SEO.
+      const median = (values: number[]): number => {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        return sorted[Math.floor(sorted.length / 2)] ?? 0;
+      };
+      const topTen = rows.filter((row) => row.position <= 10 && row.impressions >= 50);
+      const typicalCtr = median(topTen.map((row) => row.ctr));
+      const weakCtr = topTen
+        .filter((row) => row.ctr < typicalCtr * 0.5)
+        .sort((a, b) => b.impressions - a.impressions)
+        .slice(0, limit);
+
+      const summary = [
+        `Search Console (${site}), последни ${days} дни, ${rows.length} заявки.`,
+        striking.length
+          ? `На прага на топ 10 (позиция 5–20):\n` +
+            striking.map((row) => `${row.keys[0]} — позиция ${row.position.toFixed(1)}, ${row.impressions} импресии, ${row.clicks} клика`).join('\n')
+          : 'Няма заявки между позиция 5 и 20 с достатъчно импресии.',
+        weakCtr.length
+          ? `В топ 10, но с нисък CTR (типичният тук е ${(typicalCtr * 100).toFixed(1)}%):\n` +
+            weakCtr.map((row) => `${row.keys[0]} — позиция ${row.position.toFixed(1)}, CTR ${(row.ctr * 100).toFixed(1)}%, ${row.impressions} импресии`).join('\n')
+          : 'Няма заявки в топ 10 с подозрително нисък CTR.',
+        'Подреди ги по това колко работа искат срещу колко носят и предложи ' +
+          'първите две-три като задачи.',
+      ].join('\n');
+
+      return { summary, data: { site, days, striking, weakCtr, typicalCtr }, kind: 'gsc' };
     },
   },
 
@@ -837,8 +992,18 @@ export const TOOLS: Record<string, ToolDefinition> = {
   },
 };
 
-export function toolSchemas(): ToolSchema[] {
-  return Object.values(TOOLS).map((tool) => tool.schema);
+/**
+ * Инструментите, които моделът вижда.
+ *
+ * Analytics отпада, когато обхватът не е поискан: инструмент, който винаги
+ * отговаря „няма достъп“, е обещание, което ботът не може да спази — а моделът
+ * ще го пробва отново при следващия въпрос.
+ */
+export function toolSchemas(env: Env): ToolSchema[] {
+  const analytics = analyticsEnabled(env);
+  return Object.entries(TOOLS)
+    .filter(([name]) => analytics || !name.startsWith('ga4_'))
+    .map(([, tool]) => tool.schema);
 }
 
 export interface ToolRunLog {

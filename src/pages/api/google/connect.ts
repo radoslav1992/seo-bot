@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { randomId } from '../../../lib/auth';
-import { authorizeUrl, googleConfig } from '../../../lib/google';
+import { authorizeUrl, googleConfig, googleScopes } from '../../../lib/google';
 import { guardApi } from '../../../lib/guard';
 
 export const prerender = false;
@@ -28,5 +28,5 @@ export const GET: APIRoute = async (context) => {
     .bind(state, user.id, Date.now())
     .run();
 
-  return context.redirect(authorizeUrl(config, state), 302);
+  return context.redirect(authorizeUrl(config, state, googleScopes(env)), 302);
 };

@@ -21,7 +21,8 @@ const data = await loadDashboard(env, env.DB, user.id, period);
 const googleStatus = Astro.url.searchParams.get('google');
 
 const GOOGLE_MESSAGES: Record<string, string> = {
-  ok: 'Google е свързан. Избери имот в Search Console и в Analytics по-долу.',
+  ok: 'Google е свързан. Избери имот в Search Console по-долу, за да чете ботът данните.',
+  'ok-matched': 'Google е свързан и имотът в Search Console е закачен автоматично. Питай бота „какво се промени в Search Console“.',
   denied: 'Отказа достъпа в Google. Без него ботът не вижда реални позиции и трафик.',
   invalid: 'Връзката не можа да се потвърди. Опитай отново от бутона.',
   'no-refresh': 'Google не върна дълготраен достъп. Опитай отново и потвърди на екрана за съгласие.',
@@ -359,8 +360,9 @@ const auditAt = data.audit
     <section id="google">
       <h2 style={H2}>Данни от Google</h2>
       <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 12px 0 24px">
-        Search Console дава реалните позиции и заявки, Analytics — какво правят хората след клика.
-        Свързването е само за четене и може да се прекъсне по всяко време.
+        Search Console дава реалните позиции и заявки — по кои търсения излизаш, на коя позиция и какво
+        се е променило. Свързването е само за четене, имотът се закача автоматично, а достъпът може да
+        се прекъсне по всяко време.
       </p>
       <div data-google style="border-top: 2px solid var(--color-text); padding-top: 20px">
         <p style="font-size: 14px; color: var(--color-neutral-700); margin: 0">Проверявам връзката…</p>

@@ -17,15 +17,32 @@ const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v2/userinfo';
 
 /**
- * Само за четене — приложението няма причина да пише нищо в чужд имот.
- * `webmasters.readonly` покрива и списъка със сайтове, и справките.
+ * Обхватите. Само за четене — приложението няма причина да пише нищо в чужд имот.
+ *
+ * Analytics НЕ е включен по подразбиране и това не е пестеливост, а условие за
+ * пускане: `analytics.readonly` е „чувствителен“ обхват и до одобрение от Google
+ * приложението може да свърже най-много 100 изрично изброени тестови акаунта.
+ * `webmasters.readonly` не е чувствителен, тоест със Search Console клиентите са
+ * неограничени от първия ден.
+ *
+ * Analytics се включва с `GOOGLE_ENABLE_ANALYTICS=1`, след като проверката мине.
+ * Виж docs/deploy.md → „Кой може да свърже акаунта си“.
  */
-export const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/webmasters.readonly',
-  'https://www.googleapis.com/auth/analytics.readonly',
-  'openid',
-  'email',
-].join(' ');
+const SCOPE_SEARCH_CONSOLE = 'https://www.googleapis.com/auth/webmasters.readonly';
+const SCOPE_ANALYTICS = 'https://www.googleapis.com/auth/analytics.readonly';
+
+export function analyticsEnabled(env: Env): boolean {
+  return env.GOOGLE_ENABLE_ANALYTICS === '1' || env.GOOGLE_ENABLE_ANALYTICS === 'true';
+}
+
+export function googleScopes(env: Env): string {
+  return [
+    SCOPE_SEARCH_CONSOLE,
+    ...(analyticsEnabled(env) ? [SCOPE_ANALYTICS] : []),
+    'openid',
+    'email',
+  ].join(' ');
+}
 
 export interface GoogleConfig {
   clientId: string;
@@ -43,12 +60,12 @@ export function googleConfig(env: Env, requestUrl: string): GoogleConfig | null 
   };
 }
 
-export function authorizeUrl(config: GoogleConfig, state: string): string {
+export function authorizeUrl(config: GoogleConfig, state: string, scopes: string): string {
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
     response_type: 'code',
-    scope: GOOGLE_SCOPES,
+    scope: scopes,
     // Без `offline` Google не дава refresh токен и връзката умира след час.
     access_type: 'offline',
     // Без `consent` Google връща refresh токен САМО първия път — при повторно
@@ -130,6 +147,7 @@ export async function saveGoogleAccount(
   userId: string,
   refreshToken: string,
   email: string,
+  scopes: string,
 ): Promise<void> {
   const encrypted = await encryptSecret(refreshToken, encKey);
   const now = Date.now();
@@ -144,7 +162,7 @@ export async function saveGoogleAccount(
          scopes = excluded.scopes,
          created_utc = excluded.created_utc`,
     )
-    .bind(randomId(), userId, email, encrypted, GOOGLE_SCOPES, now)
+    .bind(randomId(), userId, email, encrypted, scopes, now)
     .run();
 }
 
@@ -241,6 +259,136 @@ export async function gscSearchAnalytics(accessToken: string, options: GscQueryO
   if (!res.ok) throw new Error(`Search Console върна ${res.status}.`);
   const data = (await res.json()) as { rows?: GscRow[] };
   return data.rows ?? [];
+}
+
+/**
+ * Кой имот в Search Console отговаря на следения домейн.
+ *
+ * Прави разликата между „свързах Google“ и „работи“: без това потребителят
+ * трябва да избере имот от падащо меню, а повечето хора не знаят разликата
+ * между `sc-domain:` и адрес с префикс, нито че `https://` и `https://www.`
+ * са два различни имота.
+ *
+ * Редът е по надеждност: имотът за целия домейн покрива и поддомейни, и двата
+ * протокола, затова се предпочита пред префиксните.
+ */
+export function matchSiteForDomain(sites: GscSite[], domain: string): string | null {
+  const bare = domain.toLowerCase().replace(/^www\./, '');
+  const candidates = [
+    `sc-domain:${bare}`,
+    `https://${bare}/`,
+    `https://www.${bare}/`,
+    `http://${bare}/`,
+    `http://www.${bare}/`,
+  ];
+
+  const owned = sites.filter((site) => site.permissionLevel !== 'siteUnverifiedUser');
+  for (const candidate of candidates) {
+    const hit = owned.find((site) => site.siteUrl.toLowerCase() === candidate);
+    if (hit) return hit.siteUrl;
+  }
+
+  // Последен опит: имот, чийто хост съвпада, дори форматът да е различен.
+  const loose = owned.find((site) => {
+    const raw = site.siteUrl.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+    return raw.toLowerCase().replace(/^www\./, '') === bare;
+  });
+  return loose?.siteUrl ?? null;
+}
+
+/* ---------------------------------------------------------------- */
+/* Сравнение на два периода                                          */
+/* ---------------------------------------------------------------- */
+
+export interface GscDelta {
+  key: string;
+  clicks: number;
+  clicksPrev: number;
+  clicksDelta: number;
+  impressions: number;
+  impressionsPrev: number;
+  ctr: number;
+  position: number;
+  positionPrev: number;
+  /** Положително = изкачване (по-малък номер на позиция). */
+  positionDelta: number;
+  /** Появила се, изчезнала или присъстваща и в двата периода. */
+  state: 'new' | 'lost' | 'both';
+}
+
+/**
+ * Search Console изостава с 2–3 дни. Заявка „до вчера“ връща празни редове и
+ * това изглежда като срив, какъвто няма.
+ */
+const GSC_LAG_DAYS = 3;
+
+/**
+ * Двата периода един до друг — това, което отговаря на „какво се промени“.
+ *
+ * Прави се тук, а не в модела: разликата между две числа е аритметика и
+ * трябва да дава един и същ отговор при всяко питане. Моделът получава готови
+ * разлики и обяснява защо, вместо да ги смята.
+ */
+export async function gscCompare(
+  accessToken: string,
+  options: { siteUrl: string; dimension: 'query' | 'page' | 'country' | 'device'; days: number; rowLimit?: number },
+): Promise<{ current: GscRow[]; previous: GscRow[]; deltas: GscDelta[]; period: { from: string; to: string; prevFrom: string; prevTo: string } }> {
+  const days = Math.max(1, Math.min(options.days, 240));
+  const period = {
+    to: daysAgo(GSC_LAG_DAYS),
+    from: daysAgo(GSC_LAG_DAYS + days - 1),
+    prevTo: daysAgo(GSC_LAG_DAYS + days),
+    prevFrom: daysAgo(GSC_LAG_DAYS + 2 * days - 1),
+  };
+  const rowLimit = Math.min(options.rowLimit ?? 200, 500);
+
+  const [current, previous] = await Promise.all([
+    gscSearchAnalytics(accessToken, {
+      siteUrl: options.siteUrl, startDate: period.from, endDate: period.to,
+      dimensions: [options.dimension], rowLimit,
+    }),
+    gscSearchAnalytics(accessToken, {
+      siteUrl: options.siteUrl, startDate: period.prevFrom, endDate: period.prevTo,
+      dimensions: [options.dimension], rowLimit,
+    }),
+  ]);
+
+  const before = new Map(previous.map((row) => [row.keys.join(' / '), row]));
+  const deltas: GscDelta[] = [];
+
+  for (const row of current) {
+    const key = row.keys.join(' / ');
+    const old = before.get(key);
+    before.delete(key);
+    deltas.push({
+      key,
+      clicks: row.clicks,
+      clicksPrev: old?.clicks ?? 0,
+      clicksDelta: row.clicks - (old?.clicks ?? 0),
+      impressions: row.impressions,
+      impressionsPrev: old?.impressions ?? 0,
+      ctr: row.ctr,
+      position: row.position,
+      positionPrev: old?.position ?? 0,
+      // Позицията е „колкото по-малка, толкова по-добре“, затова знакът се обръща.
+      positionDelta: old ? old.position - row.position : 0,
+      state: old ? 'both' : 'new',
+    });
+  }
+
+  // Каквото е останало в `before`, го е имало преди, а сега го няма — това е
+  // най-важната половина на въпроса „какво паднахме“ и лесно се изпуска.
+  for (const [key, old] of before) {
+    deltas.push({
+      key,
+      clicks: 0, clicksPrev: old.clicks, clicksDelta: -old.clicks,
+      impressions: 0, impressionsPrev: old.impressions,
+      ctr: 0, position: 0, positionPrev: old.position, positionDelta: 0,
+      state: 'lost',
+    });
+  }
+
+  return { current, previous, deltas, period };
 }
 
 export interface UrlInspection {

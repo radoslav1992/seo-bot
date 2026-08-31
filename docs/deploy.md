@@ -105,12 +105,14 @@ Worker → **Settings** → **Domains & Routes** → Add custom domain.
 ## 5. Google Search Console и Analytics
 
 1. В [Google Cloud Console](https://console.cloud.google.com/) създай проект.
-2. Включи **Google Search Console API**, **Google Analytics Data API** и
-   **Google Analytics Admin API**.
+2. Включи **Google Search Console API**. (Analytics Data API и Analytics
+   Admin API — само ако ще пускаш и Analytics.)
 3. Настрой екрана за съгласие (външен, ако потребителите не са в твоята
-   организация) с обхватите:
+   организация) с обхвата:
    - `https://www.googleapis.com/auth/webmasters.readonly`
-   - `https://www.googleapis.com/auth/analytics.readonly`
+
+   Само този. Приложението иска Analytics единствено ако зададеш
+   `GOOGLE_ENABLE_ANALYTICS=1` — виж защо по-долу.
 4. Създай OAuth клиент тип **Web application** с authorized redirect URI:
    `https://ТВОЯТ-ДОМЕЙН/api/google/callback`
 
@@ -139,13 +141,11 @@ Analytics — не, докато приложението не мине пров
 върху домейна, политика за поверителност на живо, видео демонстрация на
 потока и обосновка защо е нужен обхватът).
 
-Оттук следва и разумният ред на пускане:
-
-1. **Пусни само със Search Console.** Махни `analytics.readonly` от
-   `GOOGLE_SCOPES` в [`src/lib/google.ts`](../src/lib/google.ts) и от екрана за
-   съгласие. Всеки клиент може да свърже акаунт от първия ден; позициите и
-   заявките — най-важната част — работят.
-2. **Подай за проверка** и добави Analytics обратно, когато мине.
+Затова приложението иска **само Search Console по подразбиране**. Нищо не се
+маха от кода: Analytics се включва с променливата `GOOGLE_ENABLE_ANALYTICS=1`
+в Settings → Variables and Secrets, след като проверката мине. Докато е
+изключена, инструментите `ga4_*` не се предлагат и на модела — инструмент,
+който винаги отговаря „няма достъп“, е обещание, което ботът не може да спази.
 
 Категорията се вижда най-сигурно в самия Google Cloud Console: при добавяне на
 обхват той е отбелязан като Sensitive / Restricted / нищо. Класификациите се
