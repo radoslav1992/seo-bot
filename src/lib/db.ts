@@ -59,6 +59,25 @@ export function toSessionUser(row: UserRow): SessionUser {
 /* Потребители и сесии                                               */
 /* ---------------------------------------------------------------- */
 
+/**
+ * Липсва ли схемата в базата.
+ *
+ * Става, когато деплоят е минал, но миграциите — не: базата съществува,
+ * таблиците ги няма. Суровата грешка на D1 („no such table: users“) е вярна,
+ * но не казва на кого какво да оправи, а се появява чак при първата
+ * регистрация — далеч от мястото на истинската причина.
+ */
+export function isMissingSchema(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no such table|no such column/i.test(message);
+}
+
+/** Едно съобщение за целия продукт, за да не се римува различно на пет места. */
+export const MISSING_SCHEMA_MESSAGE =
+  'Базата е свързана, но таблиците липсват — миграциите не са минали. ' +
+  'В Cloudflare: Worker → Settings → Build, командата за deploy трябва да е ' +
+  '`npm run deploy:cf`, не `npx wrangler deploy`. После пусни deploy отново.';
+
 export type RegisterResult =
   | { ok: true; user: SessionUser; setCookie: string }
   | { ok: false; error: string };

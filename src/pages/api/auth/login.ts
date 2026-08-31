@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { loginUser } from '../../../lib/db';
+import { isMissingSchema, loginUser, MISSING_SCHEMA_MESSAGE } from '../../../lib/db';
 import { readJson } from '../../../lib/guard';
 
 export const prerender = false;
@@ -15,7 +15,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return Response.json({ ok: false, error: 'Невалидно запитване.' }, { status: 400 });
   }
 
-  const result = await loginUser(env.DB, env.SESSION_SECRET, { email: body.email, password: body.password });
+  let result;
+  try {
+    result = await loginUser(env.DB, env.SESSION_SECRET, { email: body.email, password: body.password });
+  } catch (error) {
+    if (isMissingSchema(error)) {
+      return Response.json({ ok: false, error: MISSING_SCHEMA_MESSAGE }, { status: 503 });
+    }
+    throw error;
+  }
   if (!result.ok) return Response.json({ ok: false, error: result.error }, { status: 401 });
 
   return Response.json({ ok: true, redirect: '/tablo/' }, { headers: { 'Set-Cookie': result.setCookie } });
