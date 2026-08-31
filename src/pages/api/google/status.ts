@@ -1,5 +1,8 @@
 import type { APIRoute } from 'astro';
-import { accessTokenFor, disconnectGoogle, ga4ListProperties, googleAccountEmail, gscListSites } from '../../../lib/google';
+import {
+  accessTokenFor, analyticsEnabled, disconnectGoogle, ga4ListProperties, googleAccountEmail,
+  googleAccountScopes, googleScopes, gscListSites,
+} from '../../../lib/google';
 import { guardApi } from '../../../lib/guard';
 
 export const prerender = false;
@@ -21,12 +24,26 @@ export const GET: APIRoute = async (context) => {
     return Response.json({ ok: true, configured, connected: false, expired: true, email });
   }
 
-  const [sites, properties] = await Promise.all([
+  const [sites, properties, granted] = await Promise.all([
     gscListSites(token).catch(() => []),
-    ga4ListProperties(token).catch(() => []),
+    analyticsEnabled(env) ? ga4ListProperties(token).catch(() => []) : Promise.resolve([]),
+    googleAccountScopes(db, user.id),
   ]);
 
-  return Response.json({ ok: true, configured, connected: true, email, sites, properties });
+  /*
+   * Обхватите, които инсталацията иска СЕГА, срещу тези, с които е издаден
+   * токенът. Разминаване значи, че потребителят трябва да свърже наново —
+   * иначе новата функция просто мълчаливо не работи за него.
+   */
+  const wanted = googleScopes(env).split(' ').filter(Boolean);
+  const missing = wanted.filter((scope) => !granted.includes(scope));
+
+  return Response.json({
+    ok: true, configured, connected: true, email, sites, properties,
+    scopes: granted,
+    needsReconnect: missing.length > 0,
+    missingScopes: missing,
+  });
 };
 
 export const DELETE: APIRoute = async (context) => {

@@ -1,5 +1,9 @@
 import type { APIRoute } from 'astro';
-import { exchangeCode, fetchGoogleEmail, googleConfig, saveGoogleAccount } from '../../../lib/google';
+import {
+  exchangeCode, fetchGoogleEmail, googleConfig, googleScopes, gscListSites, matchSiteForDomain,
+  saveGoogleAccount,
+} from '../../../lib/google';
+import { listDomains } from '../../../lib/db';
 import { guardApi } from '../../../lib/guard';
 
 export const prerender = false;
@@ -46,6 +50,37 @@ export const GET: APIRoute = async (context) => {
   }
 
   const email = tokens.access_token ? await fetchGoogleEmail(tokens.access_token) : '';
-  await saveGoogleAccount(db, env.TOKEN_ENC_KEY, user.id, tokens.refresh_token, email);
-  return back(context, 'ok');
+  await saveGoogleAccount(db, env.TOKEN_ENC_KEY, user.id, tokens.refresh_token, email, googleScopes(env));
+
+  /*
+   * Имотът се закача сам, докато токенът е още в ръка.
+   *
+   * Иначе „свързах Google“ и „ботът вижда данните ми“ са две различни неща,
+   * а между тях стои падащо меню, в което повечето хора не знаят разликата
+   * между `sc-domain:` и адрес с префикс. Не се ли уцели — менюто си остава
+   * там и потребителят избира ръчно.
+   */
+  let matched: string | null = null;
+  if (tokens.access_token) {
+    try {
+      const [sites, domains] = await Promise.all([
+        gscListSites(tokens.access_token),
+        listDomains(db, user.id),
+      ]);
+      for (const domain of domains) {
+        if (domain.gsc_site) continue;
+        const site = matchSiteForDomain(sites, domain.domain);
+        if (!site) continue;
+        await db
+          .prepare('UPDATE domains SET gsc_site = ? WHERE id = ? AND user_id = ?')
+          .bind(site, domain.id, user.id)
+          .run();
+        matched = matched ?? site;
+      }
+    } catch {
+      /* закачането е удобство, не условие — връзката вече е записана */
+    }
+  }
+
+  return back(context, matched ? 'ok-matched' : 'ok');
 };

@@ -54,6 +54,14 @@ interface Env {
   TOKEN_ENC_KEY?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * Включва и Google Analytics покрай Search Console (`1` или `true`).
+   *
+   * По подразбиране е изключен: `analytics.readonly` е чувствителен обхват и
+   * до одобрение от Google приложението свързва най-много 100 изброени
+   * тестови акаунта. Само със Search Console клиентите са неограничени.
+   */
+  GOOGLE_ENABLE_ANALYTICS?: string;
 
   PUBLIC_SITE_URL?: string;
   /** Моделът за чата и инструментите. Трябва да поддържа tool calling. */
