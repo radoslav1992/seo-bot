@@ -5,18 +5,17 @@
  * бранш, той ли излиза. Мерим го буквално — задаваме въпроса, четем отговора
  * и търсим в него домейна и името на бранда.
  *
- * КЛЮЧОВОТО РАЗЛИЧАВАНЕ тук е между двигател С ЖИВО ТЪРСЕНЕ и модел без него.
+ * ВСИЧКО минава през `env.AI.run` — binding-а на Workers AI, с две аргумента и
+ * нищо повече. Партньорските модели (`openai/*`, `google/*`) се викат по същия
+ * начин като собствените `@cf/*`: без AI Gateway, без токен за Cloudflare API
+ * и без ключове на доставчиците. Сметката е на акаунта.
  *
- * Клиентът пита „появявам ли се, когато някой пита AI за моя бранш“. Отговорът
- * на този въпрос се дава само от двигател, който наистина търси в интернет в
- * момента на въпроса. Модел без търсене отговаря от паметта си — тоест от
- * данните, с които е обучен преди месеци. Това е ДРУГО измерване: не „в
- * отговора ли си днес“, а „знае ли изобщо за теб“. Полезно е, но е друго
- * число и стои на друго място в таблото.
- *
- * Живото търсене минава през Cloudflare AI Gateway, който проксира
- * собствените инструменти за търсене на доставчиците и — с Unified Billing —
- * не иска техните ключове: плаща се от сметката в Cloudflare.
+ * ВТОРОТО важно нещо: разликата между двигател, който наистина е ТЪРСИЛ, и
+ * модел, който е отговорил от паметта си. Първото отговаря на въпроса „в
+ * отговора ли си днес“, второто — на „знае ли изобщо за теб“. И понеже дали
+ * търсенето е минало не се знае предварително, то се ЧЕТЕ ОТ ОТГОВОРА, а не се
+ * обявява в конфигурацията: продуктът, който казва на клиента да мери вместо
+ * да предполага, не бива да предполага за себе си.
  */
 
 import { fastModel, parseJsonFromModel, runChat, type ChatMessage } from './ai';
@@ -24,142 +23,99 @@ import { fastModel, parseJsonFromModel, runChat, type ChatMessage } from './ai';
 /** Идентификаторът е низ, а не изброен тип: списъкът идва от конфигурацията. */
 export type EngineId = string;
 
-/**
- * Как се вика двигателят и как се включва търсенето при него.
- *
- * Всеки доставчик има свой начин — това не е наш избор, а тяхното API. Затова
- * доставчикът е изброен тип: добавянето на нов е нов случай в `askEngine`, а
- * не нов низ в конфигурацията, който мълчаливо не прави нищо.
- */
-export type EngineProvider =
-  /** AI Gateway → OpenAI Responses API, `web_search_preview`. */
-  | 'gateway-openai'
-  /** AI Gateway → Anthropic Messages API, `web_search_20250305`. */
-  | 'gateway-anthropic'
-  /** AI Gateway → xAI Responses API, `web_search`. */
-  | 'gateway-xai'
-  /** AI Gateway → Alibaba chat/completions, `enable_search: true`. */
-  | 'gateway-alibaba'
-  /** Google AI Studio направо, `google_search` grounding. Иска свой ключ. */
-  | 'gemini'
-  /** Perplexity направо — търсенето му е вградено. Иска свой ключ. */
-  | 'perplexity'
-  /** Workers AI binding. БЕЗ търсене — отговаря от паметта на модела. */
-  | 'workers-ai';
-
-/** Кои доставчици наистина търсят в интернет в момента на въпроса. */
-export const GROUNDED_PROVIDERS: EngineProvider[] = [
-  'gateway-openai',
-  'gateway-anthropic',
-  'gateway-xai',
-  'gateway-alibaba',
-  'gemini',
-  'perplexity',
-];
-
 export interface EngineInfo {
   id: EngineId;
   label: string;
-  provider: EngineProvider;
-  /** Идентификаторът на модела. За gateway доставчиците е `доставчик/модел`. */
-  model?: string;
-  /** Само за доставчиците със свой ключ (`gemini`, `perplexity`). */
-  secret?: string;
+  /**
+   * Идентификаторът на модела. Той избира и доставчика, и формата на тялото —
+   * няма отделно поле за това, защото имената не се застъпват:
+   * `openai/*`, `google/*`, `@cf/*`.
+   */
+  model: string;
+  /** Да се поиска ли живо търсене. Дали е минало — казва отговорът. */
+  search?: boolean;
   note?: string;
 }
 
-export function isGrounded(engine: EngineInfo): boolean {
-  return GROUNDED_PROVIDERS.includes(engine.provider);
+/**
+ * Формата на тялото за `env.AI.run`. Три са, не една.
+ *
+ * Разликата не е козметична: подадени грешни полета, моделът не гърми, а тихо
+ * пренебрегва тавана, температурата и инструментите — тоест търсенето мълчаливо
+ * не се случва, а отговорът изглежда наред.
+ */
+export type BodyShape = 'gemini' | 'responses' | 'messages';
+
+export function bodyShapeFor(model: string): BodyShape {
+  if (model.startsWith('google/')) return 'gemini';
+  if (model.startsWith('openai/')) return 'responses';
+  return 'messages';
+}
+
+/**
+ * Може ли този модел изобщо да търси.
+ *
+ * Собствените модели на Cloudflare (`@cf/*`) нямат инструмент за търсене —
+ * те отговарят от теглата си. При партньорските се ИСКА търсене, но дали е
+ * минало се проверява после, в отговора.
+ */
+export function canSearch(model: string): boolean {
+  return bodyShapeFor(model) !== 'messages';
 }
 
 /**
  * Двигателите по подразбиране.
  *
- * Проприетарните модели, а не отворените: клиентът иска да знае какво отговаря
- * ChatGPT, не какво би отговорил Llama. През AI Gateway с Unified Billing те
- * се викат без нито един чужд ключ — плащат се от сметката в Cloudflare.
+ * Проприетарните модели, защото клиентът пита какво отговаря ChatGPT, а не
+ * какво би отговорил Llama. През binding-а те не искат нито един чужд ключ.
  *
- * Каталогът се мени бързо (само за 2026: GPT-5.6, Gemini 3.7, Grok 4.x…),
- * затова този списък е НАЧАЛНА СТОЙНОСТ, а не истина в кода:
- * `VISIBILITY_ENGINES` в `wrangler.jsonc` го замества изцяло, а
- * „Провери моделите“ в таблото казва кои от настроените наистина отговарят.
- * Виж docs/models.md.
+ * Списъкът е НАЧАЛНА СТОЙНОСТ, а не истина в кода: `VISIBILITY_ENGINES` в
+ * настройките на worker-а го замества изцяло — стойност, която се сменя от
+ * dashboard-а без деплой. Каталогът се мени бързо; „Провери моделите“ в
+ * таблото казва кои от настроените работят днес. Виж docs/models.md.
  */
 export const DEFAULT_ENGINES: EngineInfo[] = [
   {
     id: 'chatgpt',
     label: 'ChatGPT',
-    provider: 'gateway-openai',
     model: 'openai/gpt-5.6-luna',
-    note: 'С живо търсене. През AI Gateway, без ключ за OpenAI.',
-  },
-  {
-    id: 'claude',
-    label: 'Claude',
-    provider: 'gateway-anthropic',
-    model: 'anthropic/claude-haiku-4.5',
-    note: 'С живо търсене. През AI Gateway, без ключ за Anthropic.',
-  },
-  {
-    id: 'grok',
-    label: 'Grok',
-    provider: 'gateway-xai',
-    model: 'xai/grok-4.20-multi-agent-0309',
-    note: 'С живо търсене. Единственият модел на xAI с търсене през Gateway.',
-  },
-  {
-    id: 'qwen',
-    label: 'Qwen',
-    provider: 'gateway-alibaba',
-    model: 'alibaba/qwen3-max',
-    note: 'С живо търсене през `enable_search`.',
+    search: true,
+    note: 'Иска живо търсене през Responses API.',
   },
   {
     id: 'gemini',
     label: 'Gemini',
-    provider: 'gemini',
-    model: 'gemini-3.7-flash',
-    secret: 'GEMINI_API_KEY',
-    note: 'С живо търсене. AI Gateway още не проксира търсенето на Google, затова иска свой ключ.',
-  },
-  {
-    id: 'perplexity',
-    label: 'Perplexity',
-    provider: 'perplexity',
-    model: 'sonar',
-    secret: 'PERPLEXITY_API_KEY',
-    note: 'По избор. Търсенето му е вградено; връща и цитираните източници.',
+    model: 'google/gemini-3.7-flash',
+    search: true,
+    note: 'Иска живо търсене през google_search.',
   },
   {
     id: 'llama-memory',
     label: 'Llama (без търсене)',
-    provider: 'workers-ai',
     model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     note: 'Не мери видимост, а познатост: какво моделът знае за бранда наизуст.',
   },
 ];
 
-/** Секретите за външните двигатели не са в `Env`, защото са по избор. */
-type EngineSecrets = Record<string, string | undefined>;
-
 /**
  * Списъкът от двигатели за тази инсталация.
  *
- * Разчита се отбранително: счупен JSON в конфигурацията не бива да оставя
+ * Разчита се отбранително: счупен JSON в настройките не бива да оставя
  * продукта без нито един двигател, затова при грешка се връщат стандартните.
  */
 export function engines(env: Env): EngineInfo[] {
-  const raw = (env as unknown as EngineSecrets).VISIBILITY_ENGINES;
+  const raw = env.VISIBILITY_ENGINES;
   if (!raw) return DEFAULT_ENGINES;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_ENGINES;
+    if (!Array.isArray(parsed)) return DEFAULT_ENGINES;
     const cleaned = parsed.filter(
       (item): item is EngineInfo =>
         Boolean(item) &&
         typeof item === 'object' &&
         typeof (item as EngineInfo).id === 'string' &&
-        typeof (item as EngineInfo).label === 'string',
+        typeof (item as EngineInfo).label === 'string' &&
+        typeof (item as EngineInfo).model === 'string',
     );
     return cleaned.length ? cleaned : DEFAULT_ENGINES;
   } catch {
@@ -176,31 +132,29 @@ export function engineLabel(env: Env, id: string): string {
   return engineById(env, id)?.label ?? id;
 }
 
-/** Какво трябва да е налично, за да работи двигателят изобщо. */
-export function engineBlocker(env: Env, engine: EngineInfo): string | null {
-  const secrets = env as unknown as EngineSecrets;
-  if (engine.provider === 'workers-ai') return env.AI ? null : 'Workers AI не е свързан.';
-  if (engine.provider.startsWith('gateway-')) {
-    // Един токен отваря всички gateway двигатели наведнъж — затова липсата му
-    // не е проблем на един двигател, а изключена видимост изобщо.
-    if (!env.CLOUDFLARE_ACCOUNT_ID) return 'Липсва CLOUDFLARE_ACCOUNT_ID.';
-    if (!env.CLOUDFLARE_API_TOKEN) return 'Липсва секретът CLOUDFLARE_API_TOKEN.';
-    return null;
-  }
-  return engine.secret && secrets[engine.secret] ? null : `Липсва ключът ${engine.secret ?? '—'}.`;
+/**
+ * Двигателите, които могат да се пуснат сега.
+ *
+ * Единственото условие е binding-ът: всичко минава през него, включително
+ * партньорските модели. Няма ключове за проверка, защото няма ключове.
+ */
+export function availableEngines(env: Env): EngineId[] {
+  return env.AI ? engines(env).map((engine) => engine.id) : [];
 }
 
-export function availableEngines(env: Env): EngineId[] {
-  return engines(env)
-    .filter((engine) => engineBlocker(env, engine) === null)
-    .map((engine) => engine.id);
+/** Двигател, от който изобщо може да се очаква измерена видимост. */
+export function mayGround(engine: EngineInfo): boolean {
+  return Boolean(engine.search) && canSearch(engine.model);
 }
 
 export interface EngineAnswer {
   engine: EngineId;
   text: string;
   citations: string[];
-  /** Търсил ли е двигателят в интернет за този отговор. */
+  /**
+   * Търсил ли е двигателят наистина за ТОЗИ отговор — прочетено от самия
+   * отговор, не обявено в конфигурацията.
+   */
   grounded: boolean;
   error?: string;
 }
@@ -230,89 +184,119 @@ const ASK_SYSTEM_MEMORY =
   'България, и изписвай домейните им. Ако не знаеш конкретни имена, кажи го направо вместо да гадаеш.';
 
 /* ---------------------------------------------------------------- */
-/* Транспортът към двигателите                                       */
+/* Тялото на заявката                                                */
 /* ---------------------------------------------------------------- */
 
-const ASK_TIMEOUT_MS = 30_000;
-
-/** Адресът на AI Gateway. Едно място, за да не се разпилява по функциите. */
-function gatewayUrl(env: Env, path: 'responses' | 'messages' | 'chat/completions'): string | null {
-  const account = env.CLOUDFLARE_ACCOUNT_ID;
-  if (!account) return null;
-  return `https://api.cloudflare.com/client/v4/accounts/${account}/ai/v1/${path}`;
-}
-
-interface GatewayCall {
-  env: Env;
-  engine: EngineInfo;
-  path: 'responses' | 'messages' | 'chat/completions';
-  body: Record<string, unknown>;
-}
+const ASK_TIMEOUT_MS = 45_000;
+const MAX_ANSWER_TOKENS = 900;
 
 /**
- * Едно извикване през AI Gateway.
+ * Сглобява тялото за `env.AI.run` според формата на модела.
  *
- * С Unified Billing тук НЕ пътува ключ на доставчика — само токенът за
- * Cloudflare. Затова един секрет отваря ChatGPT, Claude, Grok и Qwen наведнъж
- * и няма четири ключа за въртене.
+ * При `responses` `input` е НИЗ, не масив от съобщения — масив дава
+ * „User Input Error“, код, който изглежда като сгрешен адрес, а сочи тялото.
  */
-async function callGateway({ env, engine, path, body }: GatewayCall): Promise<
-  { ok: true; data: unknown } | { ok: false; error: string }
-> {
-  const url = gatewayUrl(env, path);
-  if (!url) return { ok: false, error: 'Липсва CLOUDFLARE_ACCOUNT_ID.' };
-  if (!env.CLOUDFLARE_API_TOKEN) return { ok: false, error: 'Липсва секретът CLOUDFLARE_API_TOKEN.' };
+function askBody(engine: EngineInfo, query: string): Record<string, unknown> {
+  const shape = bodyShapeFor(engine.model);
+  const wantsSearch = mayGround(engine);
+  const system = wantsSearch ? ASK_SYSTEM : ASK_SYSTEM_MEMORY;
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
-      'Content-Type': 'application/json',
-      // Кой gateway да брои заявката. Без него Cloudflare ползва
-      // подразбиращия се за акаунта — работи, но кешът, лимитите и дневникът
-      // на нашия gateway не се прилагат и заявките не се виждат в неговите
-      // отчети.
-      ...(env.AI_GATEWAY_ID ? { 'cf-aig-gateway-id': env.AI_GATEWAY_ID } : {}),
-    },
-    body: JSON.stringify({ model: engine.model, ...body }),
-    signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
-  });
-
-  if (!res.ok) {
-    const detail = (await res.text()).slice(0, 300);
-    return { ok: false, error: `${engine.model} върна ${res.status}. ${detail}` };
+  if (shape === 'responses') {
+    return {
+      input: query,
+      instructions: system,
+      max_output_tokens: MAX_ANSWER_TOKENS,
+      ...(wantsSearch ? { tools: [{ type: 'web_search_preview' }] } : {}),
+    };
   }
-  return { ok: true, data: await res.json() };
+
+  if (shape === 'gemini') {
+    return {
+      contents: [{ role: 'user', parts: [{ text: query }] }],
+      systemInstruction: { parts: [{ text: system }] },
+      generationConfig: { maxOutputTokens: MAX_ANSWER_TOKENS },
+      ...(wantsSearch ? { tools: [{ google_search: {} }] } : {}),
+    };
+  }
+
+  return {
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: query },
+    ],
+    max_tokens: MAX_ANSWER_TOKENS,
+  };
+}
+
+/* ---------------------------------------------------------------- */
+/* Разчитане на суровия отговор                                      */
+/* ---------------------------------------------------------------- */
+
+/** Ключове, под които доставчиците слагат четим текст. */
+const TEXT_KEYS = new Set(['text', 'output_text', 'response', 'content', 'reasoning']);
+/** Ключове, под които слагат адрес на източник. */
+const URL_KEYS = new Set(['url', 'uri', 'source']);
+/**
+ * Следи ли този ключ/стойност, че наистина е ТЪРСЕНО.
+ *
+ * Всеки доставчик го бележи по своему: OpenAI слага елемент `web_search_call`
+ * в `output` и анотации `url_citation`; Gemini връща `groundingMetadata` с
+ * `groundingChunks`; Anthropic — блокове `server_tool_use` и
+ * `web_search_tool_result`. Затова се търсят следите на трите, а не една.
+ */
+const SEARCH_MARKERS = [
+  'web_search',
+  'url_citation',
+  'groundingmetadata',
+  'groundingchunks',
+  'server_tool_use',
+];
+
+interface Harvest {
+  text: string;
+  urls: string[];
+  searched: boolean;
 }
 
 /**
- * Извлича текст и цитирани адреси от произволен отговор на Gateway.
+ * Обхожда цялото дърво на отговора.
  *
- * Четирите доставчика връщат четири различни форми и всяка от тях се мени.
- * Вместо четири крехки парсера тук се обхожда цялото дърво: взимат се всички
- * низове под ключове за текст и всички `http(s)` адреси под ключове за адрес.
- * По-грубо е, но не се чупи при добавено ниво в отговора — а точно това се
- * случва най-често.
+ * По-грубо от четири отделни парсера, но не се чупи при добавено ниво — а
+ * точно това се случва най-често, когато доставчикът промени формата си.
+ * Текстът се събира от ВСИЧКИ парчета: при моделите, които мислят, първите
+ * елементи са разсъждения без текст и „вземи първия“ би върнало празно.
  */
-function harvest(data: unknown): { text: string; urls: string[] } {
+function harvest(data: unknown): Harvest {
   const texts: string[] = [];
   const urls: string[] = [];
   const seen = new Set<unknown>();
+  let searched = false;
+
+  const marks = (value: string): boolean => {
+    const lower = value.toLowerCase();
+    return SEARCH_MARKERS.some((marker) => lower.includes(marker));
+  };
 
   const walk = (node: unknown, key: string): void => {
     if (node === null || node === undefined) return;
+
     if (typeof node === 'string') {
-      if (key === 'text' || key === 'output_text' || key === 'content' || key === 'reasoning') {
+      // Следата за търсене може да е и в стойност (`"type": "web_search_call"`),
+      // и в име на ключ (`groundingMetadata`) — проверяват се и двете.
+      if (marks(node) || marks(key)) searched = true;
+      if (TEXT_KEYS.has(key)) {
         if (node.trim()) texts.push(node);
-      } else if ((key === 'url' || key === 'uri' || key === 'source') && /^https?:\/\//i.test(node)) {
+      } else if (URL_KEYS.has(key) && /^https?:\/\//i.test(node)) {
         urls.push(node);
       }
       return;
     }
+
     if (typeof node !== 'object') return;
-    // Пръстени в JSON не се очакват, но обхождането не бива да зависи от това.
     if (seen.has(node)) return;
     seen.add(node);
+
+    if (marks(key)) searched = true;
 
     if (Array.isArray(node)) {
       for (const item of node) walk(item, key);
@@ -324,7 +308,7 @@ function harvest(data: unknown): { text: string; urls: string[] } {
   };
 
   walk(data, '');
-  return { text: texts.join('\n').trim(), urls };
+  return { text: texts.join('\n').trim(), urls, searched };
 }
 
 function hostOf(value: string): string {
@@ -335,229 +319,66 @@ function hostOf(value: string): string {
   }
 }
 
-/** Общото завършване на всеки доставчик: текст → отговор с домейни. */
-function finish(engine: EngineInfo, text: string, urls: string[]): EngineAnswer {
-  const cited = urls.map(hostOf).filter(Boolean);
-  if (!text.trim()) {
-    return {
-      engine: engine.id,
-      text: '',
-      citations: [],
-      grounded: isGrounded(engine),
-      error: `${engine.model ?? engine.id} върна празен отговор.`,
-    };
+function fail(engine: EngineInfo, error: string): EngineAnswer {
+  return { engine: engine.id, text: '', citations: [], grounded: false, error };
+}
+
+/* ---------------------------------------------------------------- */
+/* Извикването                                                       */
+/* ---------------------------------------------------------------- */
+
+export async function askEngine(env: Env, engineId: EngineId, query: string): Promise<EngineAnswer> {
+  const engine = engineById(env, engineId);
+  if (!engine) {
+    return { engine: engineId, text: '', citations: [], grounded: false, error: `Няма настроен двигател „${engineId}“.` };
   }
+  if (!env.AI) return fail(engine, 'Липсва Workers AI binding. Добави "ai": { "binding": "AI" } в wrangler.jsonc.');
+
+  let raw: unknown;
+  try {
+    raw = await Promise.race([
+      env.AI.run(engine.model, askBody(engine, query)),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`${engine.model} не отговори за ${ASK_TIMEOUT_MS / 1000} s.`)), ASK_TIMEOUT_MS),
+      ),
+    ]);
+  } catch (error) {
+    return fail(engine, error instanceof Error ? error.message : 'Двигателят не отговори.');
+  }
+
+  const { text, urls, searched } = harvest(raw);
+  if (!text) {
+    // Празен отговор е ГРЕШКА, не „не те споменават“: така изчезнал от
+    // каталога модел не се брои като нула точки видимост.
+    return fail(engine, `${engine.model} върна отговор без текст.`);
+  }
+
   return {
     engine: engine.id,
     text,
     // Цитираните източници и домейните, изписани в текста, са две различни
     // неща и двете значат „конкурент, който излиза вместо теб“.
-    citations: [...new Set([...cited, ...extractDomains(text)])],
-    grounded: isGrounded(engine),
+    citations: [...new Set([...urls.map(hostOf).filter(Boolean), ...extractDomains(text)])],
+    grounded: searched,
   };
-}
-
-function fail(engine: EngineInfo, error: string): EngineAnswer {
-  return { engine: engine.id, text: '', citations: [], grounded: isGrounded(engine), error };
-}
-
-/* — OpenAI през Gateway: Responses API + `web_search_preview` — */
-async function askGatewayOpenAi(env: Env, engine: EngineInfo, query: string): Promise<EngineAnswer> {
-  const result = await callGateway({
-    env,
-    engine,
-    path: 'responses',
-    body: {
-      instructions: ASK_SYSTEM,
-      input: query,
-      max_output_tokens: 900,
-      tools: [{ type: 'web_search_preview' }],
-    },
-  });
-  if (!result.ok) return fail(engine, result.error);
-  const { text, urls } = harvest(result.data);
-  return finish(engine, text, urls);
-}
-
-/* — Anthropic през Gateway: Messages API + `web_search_20250305` — */
-async function askGatewayAnthropic(env: Env, engine: EngineInfo, query: string): Promise<EngineAnswer> {
-  const result = await callGateway({
-    env,
-    engine,
-    path: 'messages',
-    body: {
-      system: ASK_SYSTEM,
-      max_tokens: 1200,
-      messages: [{ role: 'user', content: query }],
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
-    },
-  });
-  if (!result.ok) return fail(engine, result.error);
-  const { text, urls } = harvest(result.data);
-  return finish(engine, text, urls);
-}
-
-/* — xAI през Gateway: Responses API + `web_search` — */
-async function askGatewayXai(env: Env, engine: EngineInfo, query: string): Promise<EngineAnswer> {
-  const result = await callGateway({
-    env,
-    engine,
-    path: 'responses',
-    body: {
-      instructions: ASK_SYSTEM,
-      input: query,
-      max_turns: 4,
-      tools: [{ type: 'web_search' }],
-    },
-  });
-  if (!result.ok) return fail(engine, result.error);
-  const { text, urls } = harvest(result.data);
-  return finish(engine, text, urls);
-}
-
-/* — Alibaba през Gateway: chat/completions + `enable_search` — */
-async function askGatewayAlibaba(env: Env, engine: EngineInfo, query: string): Promise<EngineAnswer> {
-  const result = await callGateway({
-    env,
-    engine,
-    path: 'chat/completions',
-    body: {
-      enable_search: true,
-      max_tokens: 900,
-      messages: [
-        { role: 'system', content: ASK_SYSTEM },
-        { role: 'user', content: query },
-      ],
-    },
-  });
-  if (!result.ok) return fail(engine, result.error);
-  // Qwen не връща източниците отделно — вплита ги в подканата. Затова
-  // конкурентите тук идват само от текста на отговора.
-  const { text, urls } = harvest(result.data);
-  return finish(engine, text, urls);
-}
-
-/* — Gemini направо: `google_search` grounding — */
-async function askGemini(engine: EngineInfo, apiKey: string, query: string): Promise<EngineAnswer> {
-  const model = engine.model ?? 'gemini-3.7-flash';
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: ASK_SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: query }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { maxOutputTokens: 900 },
-      }),
-      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
-    },
-  );
-  if (!res.ok) return fail(engine, `Gemini върна ${res.status}.`);
-
-  const data = (await res.json()) as {
-    candidates?: {
-      content?: { parts?: { text?: string }[] };
-      groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[] };
-    }[];
-  };
-  const candidate = data.candidates?.[0];
-  const text = (candidate?.content?.parts ?? []).map((part) => part.text ?? '').join('');
-  const urls = (candidate?.groundingMetadata?.groundingChunks ?? [])
-    .map((chunk) => chunk.web?.uri ?? '')
-    .filter(Boolean);
-  return finish(engine, text, urls);
-}
-
-/* — Perplexity направо: търсенето е вградено — */
-async function askPerplexity(engine: EngineInfo, apiKey: string, query: string): Promise<EngineAnswer> {
-  const res = await fetch('https://api.perplexity.ai/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: engine.model ?? 'sonar',
-      messages: [
-        { role: 'system', content: ASK_SYSTEM },
-        { role: 'user', content: query },
-      ],
-      max_tokens: 900,
-    }),
-    signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
-  });
-  if (!res.ok) return fail(engine, `Perplexity върна ${res.status}.`);
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-    citations?: string[];
-  };
-  return finish(engine, data.choices?.[0]?.message?.content ?? '', data.citations ?? []);
-}
-
-/* — Workers AI: БЕЗ търсене, от паметта на модела — */
-async function askWorkersAi(env: Env, engine: EngineInfo, query: string): Promise<EngineAnswer> {
-  const messages: ChatMessage[] = [
-    { role: 'system', content: ASK_SYSTEM_MEMORY },
-    { role: 'user', content: query },
-  ];
-  const result = await runChat(env, messages, { model: engine.model, maxTokens: 700, temperature: 0.4 });
-  return finish(engine, result.text, []);
-}
-
-export async function askEngine(env: Env, engineId: EngineId, query: string): Promise<EngineAnswer> {
-  const engine = engineById(env, engineId);
-  if (!engine) {
-    return {
-      engine: engineId,
-      text: '',
-      citations: [],
-      grounded: false,
-      error: `Няма настроен двигател „${engineId}“.`,
-    };
-  }
-
-  const secrets = env as unknown as EngineSecrets;
-  const key = engine.secret ? secrets[engine.secret] : undefined;
-
-  try {
-    switch (engine.provider) {
-      case 'gateway-openai':
-        return await askGatewayOpenAi(env, engine, query);
-      case 'gateway-anthropic':
-        return await askGatewayAnthropic(env, engine, query);
-      case 'gateway-xai':
-        return await askGatewayXai(env, engine, query);
-      case 'gateway-alibaba':
-        return await askGatewayAlibaba(env, engine, query);
-      case 'gemini':
-        return key ? await askGemini(engine, key, query) : fail(engine, `Няма ключ ${engine.secret}.`);
-      case 'perplexity':
-        return key ? await askPerplexity(engine, key, query) : fail(engine, `Няма ключ ${engine.secret}.`);
-      case 'workers-ai':
-        return env.AI ? await askWorkersAi(env, engine, query) : fail(engine, 'Workers AI не е свързан.');
-      default:
-        return fail(engine, `Непознат доставчик „${String(engine.provider)}“.`);
-    }
-  } catch (error) {
-    return fail(engine, error instanceof Error ? error.message : 'Двигателят не отговори.');
-  }
 }
 
 /**
- * Проверява кои настроени двигатели наистина отговарят.
+ * Проверява кои настроени двигатели работят — и кои наистина търсят.
  *
- * Каталогът на Workers AI се мени и вчерашният идентификатор може да е
- * изчезнал. Тази проверка го хваща с един кратък въпрос вместо със спаднал
- * до нула резултат на таблото — грешката в конфигурацията трябва да изглежда
- * като грешка, а не като лоша новина за бизнеса.
+ * Второто е по-важното. Модел, който отговаря, но без да е търсил, изглежда
+ * изправен и мери друго; без тази проверка разликата се вижда чак когато
+ * числото на таблото се окаже безсмислено.
  */
 export interface EngineHealth {
   id: EngineId;
   label: string;
-  provider: string;
-  model?: string;
-  /** Търси ли този двигател в интернет — по-важно от това дали изобщо отговаря. */
-  grounded: boolean;
+  model: string;
+  shape: BodyShape;
+  /** Поискано ли е търсене за този двигател. */
+  wantsSearch: boolean;
+  /** Минало ли е търсене при пробната заявка. */
+  searched: boolean;
   ok: boolean;
   ms: number;
   error?: string;
@@ -568,13 +389,16 @@ export async function checkEngines(env: Env): Promise<EngineHealth[]> {
   return Promise.all(
     list.map(async (engine) => {
       const started = Date.now();
-      const answer = await askEngine(env, engine.id, 'Кажи само думата „готово“.');
+      // Въпрос, на който отговор от паметта и отговор от търсене изглеждат
+      // различно — иначе проверката не може да види дали търсенето е минало.
+      const answer = await askEngine(env, engine.id, 'Кой е най-големият онлайн магазин за инструменти в България?');
       return {
         id: engine.id,
         label: engine.label,
-        provider: engine.provider,
         model: engine.model,
-        grounded: isGrounded(engine),
+        shape: bodyShapeFor(engine.model),
+        wantsSearch: mayGround(engine),
+        searched: answer.grounded,
         ok: !answer.error && answer.text.trim().length > 0,
         ms: Date.now() - started,
         error: answer.error,

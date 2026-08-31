@@ -120,9 +120,10 @@ function escapeHtml(value: string): string {
 interface EngineHealth {
   id: string;
   label: string;
-  provider: string;
-  model?: string;
-  grounded: boolean;
+  model: string;
+  shape: string;
+  wantsSearch: boolean;
+  searched: boolean;
   ok: boolean;
   ms: number;
   error?: string;
@@ -136,29 +137,38 @@ interface ModelsResponse {
   engines?: EngineHealth[];
   working?: number;
   configured?: number;
-  gatewayReady?: boolean;
   groundedConfigured?: number;
   groundedWorking?: number;
+  searchIgnored?: string[];
   hint?: string;
 }
 
 const modelsBox = document.querySelector<HTMLElement>('[data-models]');
 
-/** `grounded` е `null` за моделите на самото приложение (чат и бърз). */
+/**
+ * Един ред от проверката.
+ *
+ * `state` е `null` за моделите на самото приложение (чат и бърз — те не търсят
+ * и не се очаква да търсят). За двигателите има три състояния, не две, и
+ * средното е важното: поискано търсене, което не е минало, изглежда като
+ * изправен двигател, а мери друго.
+ */
 function row(
   label: string,
   detail: string,
   ok: boolean,
   ms: number,
-  grounded: boolean | null,
+  state: 'searched' | 'ignored' | 'memory' | null,
   error?: string,
 ): string {
   const badge =
-    grounded === null
+    state === null
       ? ''
-      : grounded
-        ? '<span class="tag tag-accent" style="margin-left: 8px">с търсене</span>'
-        : '<span class="tag tag-neutral" style="margin-left: 8px">без търсене</span>';
+      : state === 'searched'
+        ? '<span class="tag tag-accent" style="margin-left: 8px">търси</span>'
+        : state === 'ignored'
+          ? '<span class="tag tag-outline" style="margin-left: 8px">поиска търсене, но не търси</span>'
+          : '<span class="tag tag-neutral" style="margin-left: 8px">без търсене</span>';
   return `
     <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px 24px; align-items: baseline;
                 padding: 12px 0; border-bottom: 1px solid var(--color-neutral-300)">
@@ -199,19 +209,26 @@ document.querySelector<HTMLButtonElement>('[data-check-models]')?.addEventListen
   }
 
   const engines = data.engines ?? [];
-  // Двигателите с търсене отгоре — те са тези, от които зависи видимостта.
-  const ordered = [...engines].sort((a, b) => Number(b.grounded) - Number(a.grounded));
-  const allWell = data.working === data.configured && (data.groundedWorking ?? 0) > 0;
+  const stateOf = (engine: EngineHealth): 'searched' | 'ignored' | 'memory' =>
+    engine.searched ? 'searched' : engine.wantsSearch ? 'ignored' : 'memory';
+
+  // Тези, които наистина търсят, отиват отгоре — от тях зависи видимостта.
+  const rank = { searched: 0, ignored: 1, memory: 2 } as const;
+  const ordered = [...engines].sort((a, b) => rank[stateOf(a)] - rank[stateOf(b)]);
+  const allWell =
+    data.working === data.configured &&
+    (data.groundedWorking ?? 0) > 0 &&
+    (data.searchIgnored?.length ?? 0) === 0;
 
   modelsBox.innerHTML =
     (data.chat ? row(`Чат — ${data.chat.role}`, data.chat.model, data.chat.ok, data.chat.ms, null, data.chat.error) : '') +
     (data.fast ? row(`Бърз — ${data.fast.role}`, data.fast.model, data.fast.ok, data.fast.ms, null, data.fast.error) : '') +
     ordered
-      .map((engine) => row(engine.label, engine.model ?? engine.provider, engine.ok, engine.ms, engine.grounded, engine.error))
+      .map((engine) => row(engine.label, engine.model, engine.ok, engine.ms, stateOf(engine), engine.error))
       .join('') +
     `<p style="font-size: 13.5px; line-height: 1.7; color: ${allWell ? 'var(--color-neutral-700)' : 'var(--color-accent-700)'}; margin: 16px 0 0">
-       ${data.groundedWorking}/${data.groundedConfigured} двигателя с търсене отговарят
-       (${data.working}/${data.configured} общо). ${escapeHtml(data.hint ?? '')}</p>`;
+       ${data.groundedWorking}/${data.groundedConfigured} двигателя наистина търсят
+       (${data.working}/${data.configured} отговарят). ${escapeHtml(data.hint ?? '')}</p>`;
 });
 
 /* ── Google ─────────────────────────────────────────────────────── */

@@ -5,6 +5,10 @@
   "compatibility_date": "2025-11-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // Виж бележката за променливите долу — без това всеки деплой изтрива
+  // всичко, въведено в Settings → Variables and Secrets.
+  "keep_vars": true,
+
   // Cloudflare Workers сервира и статиката: целият пререндериран сайт се
   // качва като Worker assets, а Worker-ът се събужда само за `/api/*` и за
   // страниците с `prerender = false`.
@@ -16,7 +20,11 @@
   "observability": { "enabled": true },
 
   // Workers AI — моделите, с които говори ботът и с които мери видимостта.
-  // Без ключ и без външен доставчик: сметката е на акаунта в Cloudflare.
+  //
+  // Тук минава ВСИЧКО, включително партньорските модели `openai/*` и
+  // `google/*`: `env.AI.run(model, body)`, два аргумента и нищо повече. Без
+  // AI Gateway, без токен за Cloudflare API и без ключове на доставчиците —
+  // името на модела избира доставчика и формата на тялото.
   "ai": {
     "binding": "AI"
   },
@@ -32,47 +40,34 @@
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
-  ],
+  ]
 
-  "vars": {
-    // Адресът, на който Google връща OAuth потока. Трябва да съвпада точно с
-    // „Authorized redirect URI“ в Google Cloud Console.
-    "PUBLIC_SITE_URL": "https://seobot.bg",
-
-    // Cloudflare AI Gateway — през него минават двигателите с живо търсене.
-    // Идентификаторът на акаунта не е тайна (адрес, не ключ); токенът е
-    // секрет и се задава отделно.
-    "CLOUDFLARE_ACCOUNT_ID": "",
-    "AI_GATEWAY_ID": "seo-bot",
-    // Моделът за чата и за инструментите. Трябва да поддържа tool calling.
-    //
-    // Каталогът на Workers AI се мени бързо, затова моделите са ПРОМЕНЛИВИ, а
-    // не константи в кода: смяната е един ред тук и нов деплой, без да се
-    // пипа логика. Кои идентификатори са валидни днес — виж docs/models.md;
-    // `/api/models` в самото приложение проверява настроените.
-    "CHAT_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    // По-малък и по-бърз модел за помощните задачи (заглавия на чатове,
-    // кратки класификации) — не всяка задача заслужава голям модел.
-    "FAST_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
-
-    // Двигателите, по които се мери видимостта.
-    //
-    // ПРОПРИЕТАРНИТЕ модели с ЖИВО ТЪРСЕНЕ, защото това е въпросът на клиента:
-    // „когато някой пита ChatGPT за моя бранш, аз ли излизам ДНЕС“. Модел без
-    // търсене отговаря от паметта си и мери друго — виж `llama-memory`.
-    //
-    // Минават през Cloudflare AI Gateway с Unified Billing: НЕ искат ключове
-    // за OpenAI, Anthropic, xAI или Alibaba — плащат се от сметката в
-    // Cloudflare. Нужни са само CLOUDFLARE_ACCOUNT_ID и CLOUDFLARE_API_TOKEN.
-    //
-    // `provider` е един от: gateway-openai, gateway-anthropic, gateway-xai,
-    // gateway-alibaba, gemini, perplexity, workers-ai. Той решава и как се
-    // включва търсенето — всеки доставчик го прави по своему.
-    //
-    // Идентификаторите остаряват бързо. „Провери моделите“ в таблото казва
-    // кои работят днес; docs/models.md — как се намират новите.
-    "VISIBILITY_ENGINES": "[{\"id\":\"chatgpt\",\"label\":\"ChatGPT\",\"provider\":\"gateway-openai\",\"model\":\"openai/gpt-5.6-luna\",\"note\":\"С живо търсене, през AI Gateway.\"},{\"id\":\"claude\",\"label\":\"Claude\",\"provider\":\"gateway-anthropic\",\"model\":\"anthropic/claude-haiku-4.5\",\"note\":\"С живо търсене, през AI Gateway.\"},{\"id\":\"grok\",\"label\":\"Grok\",\"provider\":\"gateway-xai\",\"model\":\"xai/grok-4.20-multi-agent-0309\",\"note\":\"С живо търсене, през AI Gateway.\"},{\"id\":\"qwen\",\"label\":\"Qwen\",\"provider\":\"gateway-alibaba\",\"model\":\"alibaba/qwen3-max\",\"note\":\"С живо търсене през enable_search.\"},{\"id\":\"gemini\",\"label\":\"Gemini\",\"provider\":\"gemini\",\"model\":\"gemini-3.7-flash\",\"secret\":\"GEMINI_API_KEY\",\"note\":\"С живо търсене. Иска свой ключ.\"},{\"id\":\"llama-memory\",\"label\":\"Llama (без търсене)\",\"provider\":\"workers-ai\",\"model\":\"@cf/meta/llama-3.3-70b-instruct-fp8-fast\",\"note\":\"Мери познатост, не видимост.\"}]"
-  }
+  // ── Променливите живеят в DASHBOARD-а, не тук ────────────────────────────
+  //
+  // Този файл нарочно НЕ задава `vars`, а `keep_vars: true` горе е това, което
+  // го прави безопасно. Двете половини вървят заедно и никоя не стига сама:
+  //
+  //   • Стойност, сложена тук, тихо би върнала обратно всичко, въведено в
+  //     Settings → Variables and Secrets: всеки деплой заменя обикновените
+  //     променливи на worker-а със съдържанието на `vars`.
+  //   • Само махането на блока НЕ стига — празен набор значи „изтрий ги
+  //     всички“, а не „не пипай“.
+  //
+  // `keep_vars` казва на деплоя да остави съществуващите променливи на мира.
+  // Сложено е в конфигурацията, а не като флаг `--keep-vars`, защото важи и при
+  // деплой през Workers Builds, където командата не е наша.
+  //
+  // Смяната на модел така е стойност в dashboard-а и Deploy — без commit и без
+  // чакане на build. Това има значение: идентификаторите на моделите остаряват
+  // за седмици.
+  //
+  // Всяка променлива има стойност по подразбиране в кода, тоест свеж клон
+  // тръгва без нито една зададена:
+  //
+  //   CHAT_MODEL           @cf/meta/llama-3.3-70b-instruct-fp8-fast  src/lib/ai.ts
+  //   FAST_MODEL           @cf/meta/llama-3.1-8b-instruct-fast       src/lib/ai.ts
+  //   VISIBILITY_ENGINES   ChatGPT + Gemini + Llama                  src/lib/visibility.ts
+  //   PUBLIC_SITE_URL      (без нея се ползва адресът на заявката)   src/lib/google.ts
 
   // Секрети — задават се в таблото на Cloudflare (Worker → Settings →
   // Variables and Secrets) или с `wrangler secret put`. Нарочно НЕ тук:
@@ -80,8 +75,8 @@
   //   TOKEN_ENC_KEY        — шифрова Google refresh токените в D1 (задължителен)
   //   GOOGLE_CLIENT_ID     — OAuth клиент за Search Console и Analytics
   //   GOOGLE_CLIENT_SECRET — същият клиент
-  //   CLOUDFLARE_API_TOKEN — за AI Gateway; с него работят ChatGPT, Claude,
-  //                          Grok и Qwen наведнъж, без техните ключове
-  // По избор, за двигателите, които Gateway още не покрива с търсене:
-  //   GEMINI_API_KEY, PERPLEXITY_API_KEY
+  //
+  // Двигателите за видимост НЕ искат секрет: партньорските модели
+  // (`openai/*`, `google/*`) минават през binding-а `AI` като всички останали
+  // и се плащат от сметката в Cloudflare.
 }

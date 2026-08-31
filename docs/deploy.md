@@ -22,29 +22,19 @@ Cloudflare следи хранилището и строи сам при вся�
 Името да е `seo-bot` — точно това стои в конфигурацията и в командата за
 деплой. Отвори базата и копирай **Database ID**.
 
-Идентификаторът на акаунта е в адреса на самото табло:
-
-```
-https://dash.cloudflare.com/a1b2c3d4e5f6…/workers
-                           └─ това е ACCOUNT_ID
-```
-
-Двете се вписват в `wrangler.jsonc` направо през GitHub (моливчето върху
-файла, после Commit). Не са тайни, а адреси, и стоят в хранилището точно
+Идентификаторът се вписва в `wrangler.jsonc` направо през GitHub (моливчето
+върху файла, после Commit). Не е тайна, а адрес, и стои в хранилището точно
 защото Cloudflare строи оттук: връзка, добавена ръчно от таблото, се затрива
 при следващия деплой.
 
 Заместителите, които трябва да станат истински стойности:
 
-| В `wrangler.jsonc` | Сега | Откъде |
-|---|---|---|
-| `d1_databases[0].database_id` | нули | страницата на базата в таблото |
-| `vars.CLOUDFLARE_ACCOUNT_ID` | празно | адреса на таблото |
-| `vars.PUBLIC_SITE_URL` | `https://seobot.bg` | твоят домейн (стъпка 5) |
-| `vars.AI_GATEWAY_ID` | `seo-bot` | името на gateway-а (стъпка 4) |
-
-Само първите два спират деплоя. Другите два се оправят, след като има домейн
-и gateway.
+В `wrangler.jsonc` за попълване има **едно-единствено** нещо:
+`d1_databases[0].database_id`, сега нули. Останалите настройки — моделите,
+адресът на сайта — се задават от **Settings → Variables and Secrets** на
+worker-а и имат стойности по подразбиране в кода, тоест свеж клон тръгва без
+нито една зададена. Виж [docs/models.md](models.md) защо е така и защо не
+изчезват при деплой.
 
 Workers AI не иска създаване — `"ai": { "binding": "AI" }` е достатъчно.
 
@@ -78,11 +68,11 @@ Worker → **Settings** → **Variables and Secrets** → тип **Secret**.
 |---|---|---|
 | `SESSION_SECRET` | да | Подписва бисквитките за вход. Без него входът връща 503. |
 | `TOKEN_ENC_KEY` | да | Шифрова Google refresh токените в базата. Без него връзката с Google е изключена. |
-| `CLOUDFLARE_API_TOKEN` | **да, за видимостта** | AI Gateway. С него наведнъж работят ChatGPT, Claude, Grok и Qwen — без техните ключове. Без него видимост НЕ се мери. |
 | `GOOGLE_CLIENT_ID` | за GSC/GA | OAuth клиент |
 | `GOOGLE_CLIENT_SECRET` | за GSC/GA | същият клиент |
-| `GEMINI_API_KEY` | не | Gemini като двигател (Gateway още не проксира търсенето на Google) |
-| `PERPLEXITY_API_KEY` | не | Perplexity като двигател |
+
+Двигателите за видимост **не искат секрет**: партньорските модели минават през
+binding-а `AI` като всички останали и се плащат от сметката в Cloudflare.
 
 `SESSION_SECRET` и `TOKEN_ENC_KEY` ги измисляш ти — дълги случайни низове:
 
@@ -99,29 +89,7 @@ openssl rand -base64 48
 Секретите се задават **веднъж** и преживяват деплоите — за разлика от
 `vars`, които идват от `wrangler.jsonc` при всяко качване.
 
-## 4. AI Gateway — без него няма видимост
-
-Двигателите с живо търсене минават през Cloudflare AI Gateway. Това е и
-причината да не са нужни ключове за OpenAI, Anthropic, xAI и Alibaba: с
-**Unified Billing** те се плащат от сметката в Cloudflare.
-
-1. Таблото → **AI** → **AI Gateway** → **Create Gateway**. Името да съвпада с
-   `AI_GATEWAY_ID` в `wrangler.jsonc` (по подразбиране `seo-bot`).
-2. В настройките на gateway-а включи **Unified Billing** и зареди кредит.
-   Cloudflare взема 5% такса върху заредената сума.
-3. Създай API токен (**My Profile** → **API Tokens** → **Create Token** →
-   **Custom token**) и го подай като секрет `CLOUDFLARE_API_TOKEN`.
-
-   **Правото е `Account` → `Workers AI` → `Read`** — не „AI Gateway“. Всички
-   адреси `/accounts/{id}/ai/*` искат точно него, включително когато викат
-   чужди модели. Токен само с право за AI Gateway връща 401, а грешката
-   изглежда като недостъпен модел, не като сбъркан токен.
-
-Пропуснеш ли това, приложението работи, но мери само „познатост“ (какво
-моделите знаят наизуст), а таблото го казва изрично вместо да показва нула.
-Подробности: [docs/models.md](models.md).
-
-## 5. Домейнът
+## 4. Домейнът
 
 Worker → **Settings** → **Domains & Routes** → Add custom domain.
 
@@ -129,7 +97,7 @@ Worker → **Settings** → **Domains & Routes** → Add custom domain.
 защото от тях се смятат каноничните адреси, sitemap-ът и — важното — адресът
 за връщане на Google OAuth.
 
-## 6. Google Search Console и Analytics
+## 5. Google Search Console и Analytics
 
 1. В [Google Cloud Console](https://console.cloud.google.com/) създай проект.
 2. Включи **Google Search Console API**, **Google Analytics Data API** и
@@ -148,7 +116,7 @@ Worker → **Settings** → **Domains & Routes** → Add custom domain.
 Докато екранът за съгласие е в режим „Testing“, само изрично добавените
 тестови потребители могат да свържат акаунт.
 
-## 7. Проверката след първия деплой
+## 6. Проверката след първия деплой
 
 Отвори три адреса в браузър, без да си влязъл:
 
@@ -165,9 +133,10 @@ Worker → **Settings** → **Domains & Routes** → Add custom domain.
 
 1. Регистрирай акаунт и добави домейн.
 2. **Табло → Двигатели → „Провери моделите“.** Задължителната стъпка. Гледай
-   реда „N/M двигателя **с търсене** отговарят“ — само те мерят видимост.
-   Не отговори ли модел, поправи `VISIBILITY_ENGINES` или `CHAT_MODEL` в
-   `wrangler.jsonc` и бутни. Подробностите са в [docs/models.md](models.md).
+   реда „N/M двигателя **наистина търсят“** — само те мерят видимост. Двигател
+   с етикет „поиска търсене, но не търси“ отговаря, но мери познатост.
+   Поправките са стойност в **Settings → Variables and Secrets**, без деплой.
+   Подробностите са в [docs/models.md](models.md).
 3. „Нова проверка“ — първата отнема около минута.
 
 ## Локална разработка
@@ -187,16 +156,12 @@ npm run preview    # wrangler dev — истинският Worker с D1
 ```
 SESSION_SECRET="местна-стойност-не-за-продукция"
 TOKEN_ENC_KEY="местна-стойност-не-за-продукция"
-
-# Само ако ще пробваш двигателите с търсене (иска `--remote`):
-CLOUDFLARE_API_TOKEN="…"
 ```
 
 **Workers AI не работи при `wrangler dev --local`** — binding-ът връща
 „Binding AI needs to be run remotely“. Чатът и проверката на видимост искат
-`npx wrangler dev --remote`, а двигателите с търсене — и попълнен
-`CLOUDFLARE_ACCOUNT_ID` в `wrangler.jsonc`. Всичко останало — вход, табло,
-анализатор, задачи — работи изцяло локално.
+`npx wrangler dev --remote`. Всичко останало — вход, табло, анализатор,
+задачи — работи изцяло локално.
 
 Версията на Node е закована в `.node-version` (24), за да строят CI и
 Cloudflare с една и съща — иначе проверката в GitHub не тества това, което

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { guardApi } from '../../lib/guard';
-import { checkEngines, engines, isGrounded } from '../../lib/visibility';
+import { checkEngines, engines, mayGround } from '../../lib/visibility';
 import { DEFAULT_CHAT_MODEL, DEFAULT_FAST_MODEL, runChat } from '../../lib/ai';
 
 export const prerender = false;
@@ -28,9 +28,6 @@ export const GET: APIRoute = async (context) => {
     }, { status: 503 });
   }
 
-  // Двигателите с търсене минават през Gateway, не през binding-а — липсващият
-  // токен е най-честата причина цялата видимост да е празна.
-  const gatewayReady = Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN);
 
   const chatModel = env.CHAT_MODEL || DEFAULT_CHAT_MODEL;
   const fastModelId = env.FAST_MODEL || DEFAULT_FAST_MODEL;
@@ -61,8 +58,12 @@ export const GET: APIRoute = async (context) => {
   ]);
 
   const working = engineHealth.filter((engine) => engine.ok).length;
-  const groundedWorking = engineHealth.filter((engine) => engine.ok && engine.grounded).length;
-  const groundedConfigured = engines(env).filter(isGrounded).length;
+  // Броят, който значи нещо: двигатели, при които търсенето НАИСТИНА е минало.
+  const groundedWorking = engineHealth.filter((engine) => engine.ok && engine.searched).length;
+  const groundedConfigured = engines(env).filter(mayGround).length;
+  // Поискано търсене, което не е минало — най-тихият начин продуктът да мери
+  // друго, без никой да забележи.
+  const searchIgnored = engineHealth.filter((engine) => engine.ok && engine.wantsSearch && !engine.searched);
 
   return Response.json({
     ok: true,
@@ -71,19 +72,21 @@ export const GET: APIRoute = async (context) => {
     engines: engineHealth,
     configured: engines(env).length,
     working,
-    gatewayReady,
     groundedConfigured,
     groundedWorking,
+    searchIgnored: searchIgnored.map((engine) => engine.model),
     // Съветът се дава тук, а не в интерфейса: който вика този маршрут, иска
     // да знае какво да поправи, а не само че нещо не е наред.
-    hint: !gatewayReady && groundedConfigured > 0
-      ? 'Липсват CLOUDFLARE_ACCOUNT_ID или CLOUDFLARE_API_TOKEN — без тях нито един двигател с живо търсене не работи и видимост НЕ се мери.'
-      : groundedConfigured === 0
-        ? 'Няма настроен двигател с живо търсене. Без такъв продуктът мери само познатост, не видимост.'
+    hint: groundedConfigured === 0
+      ? 'Няма двигател, поискал живо търсене. Без такъв продуктът мери само познатост, не видимост.'
+      : searchIgnored.length > 0 && groundedWorking === 0
+        ? `Моделите отговарят, но търсенето не минава (${searchIgnored.join(', ')}). Провери дали моделът поддържа инструмент за търсене през Workers AI — без него числото не е видимост.`
         : groundedWorking === 0
-          ? 'Нито един двигател с търсене не отговаря. Провери идентификаторите на моделите срещу каталога на AI Gateway и ги задай в VISIBILITY_ENGINES.'
-          : engineHealth.some((engine) => !engine.ok)
-            ? 'Част от двигателите не отговарят — виж грешките и поправи идентификаторите им в VISIBILITY_ENGINES.'
-            : 'Всички настроени двигатели отговарят.',
+          ? 'Нито един двигател с търсене не отговаря. Провери идентификаторите на моделите срещу каталога на Workers AI и ги задай в VISIBILITY_ENGINES.'
+          : searchIgnored.length > 0
+            ? `Част от двигателите отговарят без да търсят (${searchIgnored.join(', ')}) — техните отговори влизат в „познатост“, не във видимост.`
+            : engineHealth.some((engine) => !engine.ok)
+              ? 'Част от двигателите не отговарят — виж грешките в редовете.'
+              : 'Всички настроени двигатели отговарят и търсят.',
   });
 };

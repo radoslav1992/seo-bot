@@ -29,7 +29,13 @@ interface D1Database {
   batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
-/** Workers AI. `run` връща обект или поток според `stream`. */
+/**
+ * Workers AI.
+ *
+ * Едно и също `run` обслужва и собствените модели (`@cf/*`), и партньорските
+ * (`openai/*`, `google/*`) — два аргумента, без gateway и без чужди ключове.
+ * Връща обект или поток според `stream` в тялото.
+ */
 interface AiBinding {
   run(model: string, input: Record<string, unknown>): Promise<unknown>;
 }
@@ -49,35 +55,19 @@ interface Env {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
 
-  /**
-   * Cloudflare AI Gateway — през него минават двигателите С ЖИВО ТЪРСЕНЕ.
-   *
-   * С Unified Billing тук е достатъчен само токенът за Cloudflare: ключове
-   * за OpenAI, Anthropic, xAI и Alibaba НЕ са нужни, а сметката е една.
-   */
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_API_TOKEN?: string;
-  /** Кой gateway да брои заявките. Липсва ли — подразбиращият се. */
-  AI_GATEWAY_ID?: string;
-
   PUBLIC_SITE_URL?: string;
   /** Моделът за чата и инструментите. Трябва да поддържа tool calling. */
   CHAT_MODEL?: string;
   /** По-малкият модел за заглавия и кратки задачи. */
   FAST_MODEL?: string;
   /**
-   * Двигателите за проверка на видимост, като JSON низ (виж wrangler.jsonc).
-   * Празно значи „ползвай вградения списък“.
+   * Двигателите за проверка на видимост, като JSON низ. Празно значи
+   * „ползвай вградения списък“ (DEFAULT_ENGINES в src/lib/visibility.ts).
+   *
+   * Задава се от Settings → Variables and Secrets и преживява деплоите
+   * благодарение на `keep_vars` — виж бележката в wrangler.jsonc.
    */
   VISIBILITY_ENGINES?: string;
-
-  /**
-   * По избор — само за двигателите, които AI Gateway още не покрива с
-   * търсене. Липсва ли ключът, двигателят се показва като „не отговаря“ и
-   * не се подменя мълчаливо с друг.
-   */
-  GEMINI_API_KEY?: string;
-  PERPLEXITY_API_KEY?: string;
 }
 
 type Runtime = import('@astrojs/cloudflare').Runtime<Env>;

@@ -6,7 +6,7 @@
  * невъзможен въпроса „кои точно заявки паднаха“ — а той е целият продукт.
  */
 
-import { availableEngines, engineLabel, engines, isGrounded, type EngineId } from './visibility';
+import { availableEngines, engineLabel, engines, mayGround, type EngineId } from './visibility';
 import {
   latestAudit, listChats, listCompetitors, listTasks, primaryDomain, visibilitySince,
   type ChatRow, type DomainRow, type TaskRow,
@@ -79,10 +79,16 @@ export interface DashboardData {
   configuredEngines: number;
 }
 
-/** Двигател с търсене, който наистина може да се пусне с текущите настройки. */
+/**
+ * Настроен ли е изобщо двигател, от който да се очаква измерена видимост.
+ *
+ * „Може да се пусне“, не „е минал“: дали търсенето наистина се е случило се
+ * знае едва от отговора. Тук се лови само по-грубият случай — че такъв
+ * двигател не е и поискан.
+ */
 function usableGrounded(env: Env): boolean {
   const ready = new Set(availableEngines(env));
-  return engines(env).some((engine) => isGrounded(engine) && ready.has(engine.id));
+  return engines(env).some((engine) => mayGround(engine) && ready.has(engine.id));
 }
 
 /** Броят дни е избор на потребителя, но не произволен — таблото има три копчета. */

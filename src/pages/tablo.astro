@@ -342,8 +342,10 @@ const auditAt = data.audit
         и мерят друго: дали брандът изобщо е влязъл в данните за обучение.
       </p>
       <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 0 0 20px">
-        Проприетарните модели минават през Cloudflare AI Gateway и не искат чужди ключове — плащат се от
-        сметката в Cloudflare. Каталогът се мени, затова проверката казва кои наистина отговарят днес.
+        Всички модели, включително проприетарните, минават през binding-а на Workers AI — без чужди
+        ключове и без отделна услуга. Проверката казва не само кой отговаря, но и при кого търсенето
+        <em>наистина</em> е минало: поискано търсене, което не се е случило, изглежда като изправен
+        двигател, а мери друго.
       </p>
       <div data-models style="border-top: 2px solid var(--color-text); padding-top: 20px">
         <p style="font-size: 14px; color: var(--color-neutral-700); margin: 0">
