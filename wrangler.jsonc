@@ -37,7 +37,7 @@
     {
       "binding": "DB",
       "database_name": "seo-bot",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "d6068849-923f-4376-af47-ce3502039231",
       "migrations_dir": "migrations"
     }
   ]
