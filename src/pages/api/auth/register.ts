@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { addDomain, registerUser } from '../../../lib/db';
+import { addDomain, isMissingSchema, MISSING_SCHEMA_MESSAGE, registerUser } from '../../../lib/db';
 import { isEmail, normalizeEmail, passwordProblem } from '../../../lib/auth';
 import { readJson } from '../../../lib/guard';
 
@@ -30,7 +30,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const problem = passwordProblem(password);
   if (problem) return Response.json({ ok: false, error: problem }, { status: 422 });
 
-  const result = await registerUser(env.DB, env.SESSION_SECRET, { name, email, password });
+  let result;
+  try {
+    result = await registerUser(env.DB, env.SESSION_SECRET, { name, email, password });
+  } catch (error) {
+    // Първата регистрация е и първото докосване до базата — тук се вижда
+    // пропуснатата миграция и тук трябва да се каже какво да се направи.
+    if (isMissingSchema(error)) {
+      return Response.json({ ok: false, error: MISSING_SCHEMA_MESSAGE }, { status: 503 });
+    }
+    throw error;
+  }
   if (!result.ok) return Response.json({ ok: false, error: result.error }, { status: 409 });
 
   // Домейнът е по избор — акаунт без него си е акаунт, просто таблото ще
