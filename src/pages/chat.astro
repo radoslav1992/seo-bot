@@ -1,0 +1,130 @@
+---
+/** Чатът с бота. Динамична страница — историята зависи от това кой гледа. */
+export const prerender = false;
+
+import AppLayout from '../layouts/AppLayout.astro';
+import { getChat, listChats, listMessages, primaryDomain } from '../lib/db';
+import { messages as messageCount } from '../lib/bg';
+
+const user = Astro.locals.user;
+const env = Astro.locals.runtime?.env;
+
+if (!user || !env?.DB) return Astro.redirect('/vhod/', 303);
+
+const requestedId = Astro.url.searchParams.get('id');
+const [chats, domain] = await Promise.all([listChats(env.DB, user.id, 40), primaryDomain(env.DB, user.id)]);
+
+const active = requestedId ? await getChat(env.DB, user.id, requestedId) : null;
+const activeId = active?.id ?? chats[0]?.id ?? null;
+const messages = activeId ? await listMessages(env.DB, activeId) : [];
+const activeTitle = active?.title ?? chats[0]?.title ?? 'Нов чат';
+
+const suggestions = [
+  'Как се движи видимостта ни в AI отговорите този месец?',
+  'Готов ли е сайтът за AI ботовете?',
+  'Кои заявки губим спрямо конкурентите?',
+  'Какво да оправя първо тази седмица?',
+];
+
+const today = new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long' }).format(new Date());
+const CHAT_ITEM = 'text-align: left; background: none; border: 0; border-left: 2px solid transparent; padding: 10px 12px; cursor: pointer; font-family: inherit; color: var(--color-text); display: block; width: 100%';
+const CHAT_ITEM_ACTIVE = 'text-align: left; background: var(--color-accent-100); border: 0; border-left: 2px solid var(--color-accent); padding: 10px 12px; cursor: pointer; font-family: inherit; color: var(--color-text); display: block; width: 100%';
+---
+
+<AppLayout title="Чат" user={user} current="chat" fullHeight asideWidth="260px">
+  <div slot="aside" style="display: flex; flex-direction: column; gap: 16px; min-height: 0; flex: 1">
+    <button type="button" class="btn btn-primary btn-block" data-new-chat style="color: var(--color-bg); margin-top: 0">
+      Нов чат
+    </button>
+    <div style="min-height: 0; overflow: auto; display: grid; gap: 2px; align-content: start" data-chat-list>
+      <p style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700); margin: 4px 0 8px">
+        История
+      </p>
+      {chats.map((chat) => (
+        <a href={`/chat/?id=${chat.id}`} data-chat={chat.id} style={chat.id === activeId ? CHAT_ITEM_ACTIVE : CHAT_ITEM}>
+          <span style="display: block; font-weight: 600; font-size: 14.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+            {chat.title}
+          </span>
+          <span style="display: block; font-size: 12.5px; color: var(--color-neutral-700); margin-top: 4px">
+            {messageCount(chat.messages)}
+          </span>
+        </a>
+      ))}
+      {chats.length === 0 && (
+        <p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 0">Още няма разговори.</p>
+      )}
+    </div>
+  </div>
+
+  <header style="border-bottom: 2px solid var(--color-divider); padding: 18px clamp(20px, 3vw, 40px); display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+    <div style="min-width: 0">
+      <p style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0 0 4px">
+        {domain?.domain ?? 'без домейн'} · GEO асистент
+      </p>
+      <h1 data-title style="font-weight: 800; font-size: 18px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+        {activeTitle}
+      </h1>
+    </div>
+    <span class="tag tag-outline" style="margin-left: auto">Данни от {today}</span>
+  </header>
+
+  <div style="display: flex; flex-direction: column; flex: 1; min-height: 0">
+    <section style="display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1">
+      <div style="flex: 1; min-height: 0; overflow: auto; padding: 32px clamp(20px, 3vw, 40px)" data-scroll>
+        <div style="max-width: 760px; margin: 0 auto; display: grid; gap: 28px" data-messages data-chat-id={activeId ?? ''}>
+          {messages.map((message) => (
+            message.role === 'user' ? (
+              <div style="display: grid; justify-items: end">
+                <p style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0 0 8px">Ти</p>
+                <p style="font-size: 15.5px; line-height: 1.7; margin: 0; padding: 14px 18px; background: var(--color-surface); border-left: 2px solid var(--color-text); max-width: 56ch; white-space: pre-wrap">{message.content}</p>
+              </div>
+            ) : (
+              <div>
+                <p style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent-700); margin: 0 0 8px">SEO Bot</p>
+                <p style="font-size: 16px; line-height: 1.75; margin: 0; max-width: 68ch; white-space: pre-wrap">{message.content}</p>
+              </div>
+            )
+          ))}
+        </div>
+
+        {messages.length === 0 && (
+          <div style="max-width: 760px; margin: 28px auto 0; border-top: 2px solid var(--color-divider); padding-top: 24px" data-suggestions>
+            <p style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0 0 16px">Опитай</p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap">
+              {suggestions.map((text) => (
+                <button type="button" class="btn btn-ghost" data-suggest={text} style="font-size: 14px">{text}</button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style="border-top: 2px solid var(--color-divider); padding: 20px clamp(20px, 3vw, 40px) 28px">
+        <div style="max-width: 760px; margin: 0 auto">
+          <form data-form="chat" style="display: flex; gap: 12px; align-items: stretch">
+            <input
+              class="input"
+              type="text"
+              name="message"
+              placeholder="Попитай за видимост, конкурент или напиши задание за съдържание"
+              style="flex: 1; font-size: 15.5px"
+              aria-label="Съобщение"
+              autocomplete="off"
+            />
+            <button type="submit" class="btn btn-primary" style="color: var(--color-bg)">Изпрати</button>
+          </form>
+          <p style="font-size: 12.5px; line-height: 1.6; color: var(--color-neutral-700); margin: 12px 0 0">
+            Едно съобщение = 1 кредит; проверките с инструменти струват повече и се показват, докато вървят.
+            Ботът вижда сайта ти, последната проверка и данните от Google, ако си ги свързал.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+</AppLayout>
+
+<style>
+  @keyframes blink { 0%, 60% { opacity: 1 } 61%, 100% { opacity: 0.25 } }
+</style>
+
+<script src="../scripts/chat.ts"></script>

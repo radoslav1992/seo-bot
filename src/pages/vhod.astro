@@ -1,0 +1,244 @@
+---
+/**
+ * Вход и регистрация — двете форми са на един адрес, както в дизайна.
+ *
+ * Страницата е статична и превключва изгледите с JavaScript. Влезлият
+ * потребител не бива да я вижда, но пренасочването НЕ може да стане тук:
+ * страницата се пререндерира при билда и не знае кой я гледа. Затова
+ * проверката е в скрипта и е удобство, а не защита — защитата е в /tablo/.
+ */
+import '../styles/global.css';
+
+const TAB = 'background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; padding: 0 0 12px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--color-neutral-600)';
+const TAB_ON = 'background: none; border: 0; border-bottom: 2px solid var(--color-accent); margin-bottom: -2px; padding: 0 0 12px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--color-text)';
+const H1 = 'font-weight: 800; font-size: 34px; line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 12px; margin-left: -0.03em';
+const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(--color-neutral-800)';
+---
+
+<!doctype html>
+<html lang="bg">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Вход — SEO BOT</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div class="auth-grid" style="display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); min-height: 100vh">
+      <main style="padding: 40px clamp(20px, 5vw, 72px) 56px; display: flex; flex-direction: column">
+        <a href="/" style="font-weight: 800; font-size: 18px; letter-spacing: 0.04em; color: var(--color-text)">SEO BOT</a>
+
+        <div style="max-width: 460px; width: 100%; margin: auto 0; padding: 56px 0">
+          <div style="display: flex; gap: 24px; border-bottom: 2px solid var(--color-divider); margin-bottom: 40px">
+            <button type="button" data-go="login" data-tab="login" style={TAB_ON}>Вход</button>
+            <button type="button" data-go="register" data-tab="register" style={TAB}>Регистрация</button>
+          </div>
+
+          <p class="notice" data-error hidden></p>
+
+          <!-- ── Вход ─────────────────────────────────────────────── -->
+          <div data-view="login">
+            <h1 style={H1}>Добре дошъл обратно</h1>
+            <p style={LEAD}>Влез, за да видиш днешната проверка на видимостта.</p>
+            <form data-form="login" style="display: grid; gap: 20px">
+              <div class="field">
+                <label for="login-email">Служебен имейл</label>
+                <input class="input" id="login-email" name="email" type="email" placeholder="ime@firma.bg" autocomplete="email" required />
+              </div>
+              <div class="field">
+                <label for="login-pass">Парола</label>
+                <input class="input" id="login-pass" name="password" type="password" placeholder="Поне 10 символа" autocomplete="current-password" required />
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+                <label style="display: flex; align-items: center; gap: 10px; font-size: 14.5px">
+                  <input type="checkbox" checked style="width: 16px; height: 16px; accent-color: var(--color-accent)" />
+                  Запомни ме
+                </label>
+                <button type="button" data-go="forgot" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 14.5px; color: var(--color-accent-700)">
+                  Забравена парола
+                </button>
+              </div>
+              <button type="submit" class="btn btn-primary btn-block" style="color: var(--color-bg)">Влез</button>
+            </form>
+            <p style="font-size: 14.5px; line-height: 1.7; margin: 28px 0 0; color: var(--color-neutral-800)">
+              Нямаш акаунт?
+              <button type="button" data-go="register" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 14.5px; color: var(--color-accent-700)">
+                Създай безплатен
+              </button>
+            </p>
+          </div>
+
+          <!-- ── Регистрация ──────────────────────────────────────── -->
+          <div data-view="register" hidden>
+            <h1 style={H1}>Създай акаунт</h1>
+            <p style={LEAD}>Три проверки на видимост са безплатни. Без карта, без обаждане от търговец.</p>
+            <form data-form="register" style="display: grid; gap: 20px">
+              <div class="field">
+                <label for="reg-name">Име и фамилия</label>
+                <input class="input" id="reg-name" name="name" type="text" placeholder="Мартин Дачев" autocomplete="name" required />
+              </div>
+              <div class="field">
+                <label for="reg-email">Служебен имейл</label>
+                <input class="input" id="reg-email" name="email" type="email" placeholder="ime@firma.bg" autocomplete="email" required />
+              </div>
+              <div class="field">
+                <label for="reg-domain">Домейн за проследяване</label>
+                <input class="input" id="reg-domain" name="domain" type="text" placeholder="tehnobaza.bg" />
+              </div>
+              <div class="field">
+                <label for="reg-pass">Парола</label>
+                <input class="input" id="reg-pass" name="password" type="password" placeholder="Поне 10 символа и една цифра" autocomplete="new-password" required minlength="10" />
+              </div>
+              <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.6">
+                <input type="checkbox" name="terms" required style="width: 16px; height: 16px; margin-top: 2px; accent-color: var(--color-accent)" />
+                <span>Приемам <a href="/pravno/#terms">общите условия</a> и <a href="/pravno/#privacy">политиката за поверителност</a>.</span>
+              </label>
+              <button type="submit" class="btn btn-primary btn-block" style="color: var(--color-bg)">Създай акаунт</button>
+            </form>
+            <p style="font-size: 14.5px; line-height: 1.7; margin: 28px 0 0; color: var(--color-neutral-800)">
+              Вече имаш акаунт?
+              <button type="button" data-go="login" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 14.5px; color: var(--color-accent-700)">
+                Влез
+              </button>
+            </p>
+          </div>
+
+          <!-- ── Забравена парола ─────────────────────────────────── -->
+          <div data-view="forgot" hidden>
+            <h1 style={H1}>Забравена парола</h1>
+            <p style={LEAD}>Въведи имейла на акаунта. Изпращаме връзка за нова парола, валидна 60 минути.</p>
+            <form data-form="forgot" style="display: grid; gap: 20px">
+              <div class="field">
+                <label for="fp-email">Имейл</label>
+                <input class="input" id="fp-email" name="email" type="email" placeholder="ime@firma.bg" autocomplete="email" required />
+              </div>
+              <button type="submit" class="btn btn-primary btn-block" style="color: var(--color-bg)">Изпрати връзка</button>
+              <button type="button" class="btn btn-ghost btn-block" data-go="login">Обратно към вход</button>
+            </form>
+          </div>
+
+          <!-- ── Изпратено ────────────────────────────────────────── -->
+          <div data-view="sent" hidden>
+            <span class="tag tag-accent" style="margin-bottom: 24px; display: inline-block">Изпратено</span>
+            <h1 style={H1}>Провери пощата си</h1>
+            <p style={LEAD}>
+              Ако има акаунт с този имейл, изпратихме връзка за смяна на паролата. Ако не пристигне до пет
+              минути, провери папка „Спам“ или опитай отново.
+            </p>
+            <div style="display: grid; gap: 12px">
+              <button type="button" class="btn btn-ghost btn-block" data-go="forgot">Изпрати отново</button>
+              <button type="button" class="btn btn-ghost btn-block" data-go="login">Обратно към вход</button>
+            </div>
+          </div>
+
+          <div style="border-top: 2px solid var(--color-divider); margin-top: 48px; padding-top: 20px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 13.5px">
+            <a href="/ceni/" style="color: var(--color-neutral-700)">Планове</a>
+            <a href="/pravno/#privacy" style="color: var(--color-neutral-700)">Поверителност</a>
+            <a href="/pravno/#contact" style="color: var(--color-neutral-700)">Помощ</a>
+          </div>
+        </div>
+      </main>
+
+      <aside class="auth-aside" style="background: var(--color-accent); color: var(--color-bg); padding: 40px clamp(24px, 4vw, 56px) 56px; display: flex; flex-direction: column; justify-content: space-between; gap: 40px">
+        <p style="font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; margin: 0">SEO и GEO видимост</p>
+        <div>
+          <h2 style="font-weight: 800; font-size: clamp(28px, 3.2vw, 44px); line-height: 1.06; letter-spacing: -0.02em; margin: 0 0 28px; margin-left: -0.058em">
+            <span style="display: block">Днес някой пита AI</span>
+            <span style="display: block">за твоя бранш.</span>
+          </h2>
+          <p style="font-size: 16px; line-height: 1.7; max-width: 34ch; margin: 0">
+            340+ български бранда следят видимостта си при нас. Първата проверка отнема 12 минути.
+          </p>
+        </div>
+        <p style="font-size: 13.5px; line-height: 1.7; margin: 0">
+          Данни в ЕС · DPA при заявка · Без обучение на модели с твоето съдържание
+        </p>
+      </aside>
+    </div>
+
+    <script>
+      const TAB = 'background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; padding: 0 0 12px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--color-neutral-600)';
+      const TAB_ON = 'background: none; border: 0; border-bottom: 2px solid var(--color-accent); margin-bottom: -2px; padding: 0 0 12px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--color-text)';
+
+      const views = document.querySelectorAll<HTMLElement>('[data-view]');
+      const tabs = document.querySelectorAll<HTMLElement>('[data-tab]');
+      const errorBox = document.querySelector<HTMLElement>('[data-error]');
+
+      function show(name: string) {
+        views.forEach((view) => { view.hidden = view.dataset.view !== name; });
+        // Табът „Регистрация“ свети само за нея; всичко останало е под „Вход“.
+        tabs.forEach((tab) => { tab.setAttribute('style', tab.dataset.tab === (name === 'register' ? 'register' : 'login') ? TAB_ON : TAB); });
+        if (errorBox) errorBox.hidden = true;
+      }
+
+      document.addEventListener('click', (event) => {
+        const trigger = (event.target as HTMLElement).closest<HTMLElement>('[data-go]');
+        if (trigger?.dataset.go) show(trigger.dataset.go);
+      });
+
+      // `?view=register` идва от бутоните „Започни безплатно“ по сайта.
+      const requested = new URLSearchParams(location.search).get('view');
+      if (requested && ['login', 'register', 'forgot'].includes(requested)) show(requested);
+
+      function fail(message: string) {
+        if (!errorBox) return;
+        errorBox.textContent = message;
+        errorBox.hidden = false;
+        errorBox.scrollIntoView({ block: 'nearest' });
+      }
+
+      async function submit(form: HTMLFormElement, url: string, body: Record<string, unknown>) {
+        const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+        const label = button?.textContent ?? '';
+        if (button) { button.disabled = true; button.textContent = 'Момент…'; }
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = (await res.json()) as { ok?: boolean; error?: string; redirect?: string };
+          if (!res.ok || !data.ok) { fail(data.error ?? 'Нещо се обърка. Опитай отново.'); return false; }
+          if (data.redirect) location.href = data.redirect;
+          return true;
+        } catch {
+          fail('Няма връзка със сървъра. Провери мрежата и опитай отново.');
+          return false;
+        } finally {
+          if (button) { button.disabled = false; button.textContent = label; }
+        }
+      }
+
+      document.querySelector<HTMLFormElement>('[data-form="login"]')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget as HTMLFormElement;
+        const data = new FormData(form);
+        await submit(form, '/api/auth/login', {
+          email: String(data.get('email') ?? ''),
+          password: String(data.get('password') ?? ''),
+        });
+      });
+
+      document.querySelector<HTMLFormElement>('[data-form="register"]')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget as HTMLFormElement;
+        const data = new FormData(form);
+        await submit(form, '/api/auth/register', {
+          name: String(data.get('name') ?? ''),
+          email: String(data.get('email') ?? ''),
+          domain: String(data.get('domain') ?? ''),
+          password: String(data.get('password') ?? ''),
+        });
+      });
+
+      document.querySelector<HTMLFormElement>('[data-form="forgot"]')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        // Един и същ изглед независимо дали акаунтът съществува — иначе
+        // формата става справочник кой има регистрация.
+        show('sent');
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,82 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "seo-bot",
+  "main": "./dist/_worker.js/index.js",
+  "compatibility_date": "2025-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Виж бележката за променливите долу — без това всеки деплой изтрива
+  // всичко, въведено в Settings → Variables and Secrets.
+  "keep_vars": true,
+
+  // Cloudflare Workers сервира и статиката: целият пререндериран сайт се
+  // качва като Worker assets, а Worker-ът се събужда само за `/api/*` и за
+  // страниците с `prerender = false`.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+
+  "observability": { "enabled": true },
+
+  // Workers AI — моделите, с които говори ботът и с които мери видимостта.
+  //
+  // Тук минава ВСИЧКО, включително партньорските модели `openai/*` и
+  // `google/*`: `env.AI.run(model, body)`, два аргумента и нищо повече. Без
+  // AI Gateway, без токен за Cloudflare API и без ключове на доставчиците —
+  // името на модела избира доставчика и формата на тялото.
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Данните: потребители, домейни, чатове, одити, задачи.
+  //
+  // `database_id` не е тайна — той е адрес, не ключ. Създаването на базата и
+  // прилагането на миграциите са описани в docs/deploy.md.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "seo-bot",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+
+  // ── Променливите живеят в DASHBOARD-а, не тук ────────────────────────────
+  //
+  // Този файл нарочно НЕ задава `vars`, а `keep_vars: true` горе е това, което
+  // го прави безопасно. Двете половини вървят заедно и никоя не стига сама:
+  //
+  //   • Стойност, сложена тук, тихо би върнала обратно всичко, въведено в
+  //     Settings → Variables and Secrets: всеки деплой заменя обикновените
+  //     променливи на worker-а със съдържанието на `vars`.
+  //   • Само махането на блока НЕ стига — празен набор значи „изтрий ги
+  //     всички“, а не „не пипай“.
+  //
+  // `keep_vars` казва на деплоя да остави съществуващите променливи на мира.
+  // Сложено е в конфигурацията, а не като флаг `--keep-vars`, защото важи и при
+  // деплой през Workers Builds, където командата не е наша.
+  //
+  // Смяната на модел така е стойност в dashboard-а и Deploy — без commit и без
+  // чакане на build. Това има значение: идентификаторите на моделите остаряват
+  // за седмици.
+  //
+  // Всяка променлива има стойност по подразбиране в кода, тоест свеж клон
+  // тръгва без нито една зададена:
+  //
+  //   CHAT_MODEL           @cf/meta/llama-3.3-70b-instruct-fp8-fast  src/lib/ai.ts
+  //   FAST_MODEL           @cf/meta/llama-3.1-8b-instruct-fast       src/lib/ai.ts
+  //   VISIBILITY_ENGINES   ChatGPT + Gemini + Llama                  src/lib/visibility.ts
+  //   PUBLIC_SITE_URL      (без нея се ползва адресът на заявката)   src/lib/google.ts
+
+  // Секрети — задават се в таблото на Cloudflare (Worker → Settings →
+  // Variables and Secrets) или с `wrangler secret put`. Нарочно НЕ тук:
+  //   SESSION_SECRET       — подписва бисквитките за вход (задължителен)
+  //   TOKEN_ENC_KEY        — шифрова Google refresh токените в D1 (задължителен)
+  //   GOOGLE_CLIENT_ID     — OAuth клиент за Search Console и Analytics
+  //   GOOGLE_CLIENT_SECRET — същият клиент
+  //
+  // Двигателите за видимост НЕ искат секрет: партньорските модели
+  // (`openai/*`, `google/*`) минават през binding-а `AI` като всички останали
+  // и се плащат от сметката в Cloudflare.
+}

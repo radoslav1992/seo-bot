@@ -1,0 +1,396 @@
+---
+/**
+ * Таблото.
+ *
+ * Динамична страница — числата зависят от това кой гледа, така че тя се
+ * изпълнява в Worker-а, а не се пече при билда.
+ */
+export const prerender = false;
+
+import AppLayout from '../layouts/AppLayout.astro';
+import { formatDay, loadDashboard, normalizePeriod, polylinePoints } from '../lib/dashboard';
+import { days, messages, points as scorePoints, queries } from '../lib/bg';
+
+const user = Astro.locals.user;
+const env = Astro.locals.runtime?.env;
+
+if (!user || !env?.DB) return Astro.redirect('/vhod/', 303);
+
+const period = normalizePeriod(Astro.url.searchParams.get('period'));
+const data = await loadDashboard(env, env.DB, user.id, period);
+const googleStatus = Astro.url.searchParams.get('google');
+
+const GOOGLE_MESSAGES: Record<string, string> = {
+  ok: 'Google е свързан. Избери имот в Search Console и в Analytics по-долу.',
+  denied: 'Отказа достъпа в Google. Без него ботът не вижда реални позиции и трафик.',
+  invalid: 'Връзката не можа да се потвърди. Опитай отново от бутона.',
+  'no-refresh': 'Google не върна дълготраен достъп. Опитай отново и потвърди на екрана за съгласие.',
+  'not-configured': 'Връзката с Google не е настроена на този сървър.',
+};
+
+const PERIODS = [7, 30, 90];
+const KICKER = 'font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0 0 4px';
+const H2 = 'font-weight: 800; font-size: 24px; letter-spacing: -0.01em; margin: 0';
+const STAT_LABEL = 'font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0';
+
+const points = polylinePoints(data.series);
+const auditAt = data.audit
+  ? new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long' }).format(new Date(data.audit.at))
+  : null;
+---
+
+<AppLayout title="Табло" user={user} current="tablo">
+  <header
+    style="border-bottom: 2px solid var(--color-divider); padding: 20px clamp(20px, 3vw, 40px); display: flex; align-items: center; gap: 20px; flex-wrap: wrap; background: var(--color-bg); position: sticky; top: 0; z-index: 10"
+  >
+    <div>
+      <p style={KICKER}>Домейн</p>
+      <p style="font-weight: 800; font-size: 17px; margin: 0">{data.domain?.domain ?? 'няма зададен'}</p>
+    </div>
+    <div class="seg" role="group" aria-label="Период" style="margin-left: auto">
+      {PERIODS.map((days) => (
+        <a
+          class="seg-opt"
+          href={`/tablo/?period=${days}`}
+          aria-pressed={days === period ? 'true' : 'false'}
+          style="text-decoration: none; color: inherit"
+        >{days} дни</a>
+      ))}
+    </div>
+    <button type="button" class="btn btn-primary" data-run="check_ai_visibility" style="color: var(--color-bg)">
+      Нова проверка
+    </button>
+  </header>
+
+  <div style="padding: 32px clamp(20px, 3vw, 40px) 64px; display: grid; gap: 48px">
+    {googleStatus && GOOGLE_MESSAGES[googleStatus] && (
+      <p class={googleStatus === 'ok' ? 'notice notice-ok' : 'notice'} style="margin: 0">
+        {GOOGLE_MESSAGES[googleStatus]}
+      </p>
+    )}
+
+    <p class="notice" data-toast hidden style="margin: 0"></p>
+
+    {!data.domain && (
+      <section style="border-top: 2px solid var(--color-text); padding-top: 24px">
+        <h2 style={H2}>Добави домейн, за да започнем</h2>
+        <p style="font-size: 15px; line-height: 1.7; max-width: 56ch; color: var(--color-neutral-800); margin: 12px 0 20px">
+          Ботът обхожда сайта, съставя въпросите, по които те търсят реални хора, и проверява дали AI
+          двигателите те споменават в отговорите си.
+        </p>
+        <form data-form="domain" style="display: flex; gap: 12px; flex-wrap: wrap; max-width: 520px">
+          <input class="input" name="domain" type="text" placeholder="tehnobaza.bg" required style="flex: 1; min-width: 220px" aria-label="Домейн" />
+          <button type="submit" class="btn btn-primary" style="color: var(--color-bg)">Добави</button>
+        </form>
+      </section>
+    )}
+
+    {data.domain && (
+      <section aria-label="Обобщение">
+        <div class="split-2" style="display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px; align-items: start">
+          <div>
+            <p class="kicker kicker-accent" style="margin-bottom: 16px">Видимост в AI отговори</p>
+            {!data.hasGroundedEngine && (
+              <p class="notice" style="margin: 0 0 20px; max-width: 46ch">
+                Нито един двигател с живо търсене не е готов за пускане. Без такъв не се мери видимост —
+                само какво моделите знаят наизуст. Натисни „Провери моделите“ в раздел „Двигатели“, за да
+                видиш какво липсва.
+              </p>
+            )}
+            {data.score === null ? (
+              <p style="font-size: 15px; line-height: 1.7; margin: 0 0 24px; max-width: 42ch; color: var(--color-neutral-800)">
+                {data.memoryScore === null
+                  ? 'Още няма проверки. Натисни „Нова проверка“ — ботът съставя въпросите сам и отнема около минута.'
+                  : 'Още няма проверка с двигател, който търси в интернет. Досегашните мерят само познатост.'}
+              </p>
+            ) : (
+              <>
+                <p class="num" style="font-weight: 800; font-size: 84px; line-height: 0.95; letter-spacing: -0.03em; color: var(--color-accent); margin: 0 0 12px; margin-left: -0.045em">
+                  {data.score}
+                </p>
+                <p style="font-size: 15px; line-height: 1.6; margin: 0 0 24px; color: var(--color-neutral-800)">
+                  {data.change === null
+                    ? 'Още няма достатъчно данни за сравнение с началото на периода.'
+                    : `${data.change > 0 ? '+' : ''}${scorePoints(data.change)} за ${days(period)}.`}
+                  {' '}Брандът е споменат в {data.score}% от отговорите на двигателите, които търсят в
+                  интернет в момента на въпроса.
+                </p>
+              </>
+            )}
+
+            {data.memoryScore !== null && (
+              <div style="border-top: 2px solid var(--color-divider); padding-top: 16px; margin-bottom: 24px">
+                <p class="kicker" style="margin-bottom: 8px">Познатост без търсене</p>
+                <p style="font-size: 15px; line-height: 1.6; margin: 0; color: var(--color-neutral-800)">
+                  <strong class="num" style="font-size: 22px">{data.memoryScore}%</strong> — толкова от
+                  моделите, попитани без достъп до интернет, знаят бранда наизуст. Друго измерване, не
+                  видимост: показва дали си влязъл в данните за обучение.
+                </p>
+              </div>
+            )}
+
+            {data.engines.length > 0 && (
+              <div style="display: grid; gap: 0; border-top: 2px solid var(--color-divider)">
+                {data.engines.map((engine, index) => (
+                  <div
+                    style={`display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; font-size: 14.5px${index < data.engines.length - 1 ? '; border-bottom: 1px solid var(--color-neutral-300)' : ''}`}
+                  >
+                    <span>
+                      {engine.label}
+                      <span style="color: var(--color-neutral-700); font-size: 12.5px">
+                        {' '}· {queries(engine.asked)}{engine.grounded ? '' : ' · без търсене'}
+                      </span>
+                    </span>
+                    <span class="num" style="font-weight: 800">{engine.score}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p class="kicker" style="margin-bottom: 16px">Динамика за {days(period)}</p>
+            {data.series.length > 0 ? (
+              <svg viewBox="0 0 640 260" width="100%" height="260" role="img" aria-label={`Видимост за ${period} дни`} style="display: block; overflow: visible">
+                <g stroke="#d7d3d3" stroke-width="1">
+                  <line x1="0" y1="10" x2="640" y2="10" />
+                  <line x1="0" y1="70" x2="640" y2="70" />
+                  <line x1="0" y1="130" x2="640" y2="130" />
+                  <line x1="0" y1="190" x2="640" y2="190" />
+                </g>
+                <line x1="0" y1="230" x2="640" y2="230" stroke="#201e1d" stroke-width="2" />
+                <polyline points={points} fill="none" stroke="#ec3013" stroke-width="3" />
+                <g font-family="Archivo, sans-serif" font-size="12" fill="#605d5d">
+                  <text x="0" y="250">{formatDay(data.series[0]!.day)}</text>
+                  <text x="588" y="250" text-anchor="end">{formatDay(data.series[data.series.length - 1]!.day)}</text>
+                  <text x="0" y="6" fill="#9b9797">100</text>
+                </g>
+              </svg>
+            ) : (
+              <p style="font-size: 15px; line-height: 1.7; color: var(--color-neutral-700); margin: 0; border-top: 2px solid var(--color-divider); padding-top: 20px">
+                Графиката се появява след втората проверка — една точка не е динамика.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    )}
+
+    <hr class="rule" />
+
+    <section id="klasacii">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px">
+        <h2 style={H2}>Класации по заявки</h2>
+        <span style="font-size: 13.5px; color: var(--color-neutral-700)">
+          {data.totalQueries > 0 ? `${queries(data.totalQueries)} проверени` : 'няма данни'}
+        </span>
+      </div>
+      {data.queries.length > 0 ? (
+        <div style="overflow-x: auto">
+          <table class="table">
+            <thead>
+              <tr><th style="width: 40%">Заявка</th><th>AI отговор</th><th>Двигател</th><th>Ред в отговора</th></tr>
+            </thead>
+            <tbody>
+              {data.queries.map((row) => (
+                <tr>
+                  <td>{row.query}</td>
+                  <td>
+                    {row.mentioned
+                      ? <span class="tag tag-accent">Споменат</span>
+                      : <span class="tag tag-outline">Непоменат</span>}
+                  </td>
+                  <td>{row.engines.join(', ') || '—'}</td>
+                  <td class="num">{row.position ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p style="font-size: 15px; line-height: 1.7; color: var(--color-neutral-700); margin: 0">
+          Още няма проверени заявки. „Нова проверка“ съставя въпросите сама, ако не ѝ дадеш свои.
+        </p>
+      )}
+    </section>
+
+    <hr class="rule" />
+
+    <section id="konkurenti">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px">
+        <h2 style={H2}>Конкуренти</h2>
+        <span style="font-size: 13.5px; color: var(--color-neutral-700)">от самите AI отговори</span>
+      </div>
+      {data.rivals.length > 0 ? (
+        <div class="split-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px">
+          {data.rivals.map((rival) => (
+            <div class="card">
+              <div class="card-kicker">{rival.domain}</div>
+              <div class="card-title">{rival.share}%</div>
+              <div class="card-body">
+                Появява се в {rival.mentions} от проверените отговори за твоите заявки.
+              </div>
+              <div class="card-meta">
+                <button type="button" class="btn btn-ghost" data-run="compare_competitor" data-arg-competitor={rival.domain} style="font-size: 12px; padding: 2px 4px">
+                  Сравни с нас
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style="font-size: 15px; line-height: 1.7; color: var(--color-neutral-700); margin: 0 0 20px">
+          Още няма данни кой излиза вместо теб — те идват от отговорите при проверка на видимост.
+        </p>
+      )}
+
+      <form data-form="competitor" style="display: flex; gap: 12px; flex-wrap: wrap; max-width: 520px; margin-top: 24px">
+        <input class="input" name="competitor" type="text" placeholder="masterhaus.bg" required style="flex: 1; min-width: 200px" aria-label="Домейн на конкурент" />
+        <button type="submit" class="btn btn-ghost">Следи конкурент</button>
+      </form>
+      {data.competitors.length > 0 && (
+        <p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 12px 0 0">
+          Следени: {data.competitors.join(', ')}
+        </p>
+      )}
+    </section>
+
+    <hr class="rule" />
+
+    <section id="odit">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px">
+        <h2 style={H2}>Одит на сайта</h2>
+        <button type="button" class="btn btn-ghost" data-run="crawl_site" style="font-size: 13.5px">Обходи сайта</button>
+      </div>
+      {data.audit ? (
+        <>
+          <div class="split-4" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; border-top: 2px solid var(--color-text); padding-top: 20px">
+            <div>
+              <p class="num" style="font-weight: 800; font-size: 34px; margin: 0 0 8px; color: var(--color-accent)">{data.audit.techScore}</p>
+              <p style={STAT_LABEL}>Технически резултат</p>
+            </div>
+            <div>
+              <p class="num" style="font-weight: 800; font-size: 34px; margin: 0 0 8px">{data.audit.pagesCrawled.toLocaleString('bg-BG')}</p>
+              <p style={STAT_LABEL}>Обходени адреса</p>
+            </div>
+            <div>
+              <p class="num" style="font-weight: 800; font-size: 34px; margin: 0 0 8px">{data.audit.criticalIssues}</p>
+              <p style={STAT_LABEL}>Намерени проблема</p>
+            </div>
+            <div>
+              <p class="num" style="font-weight: 800; font-size: 34px; margin: 0 0 8px">{data.audit.schemaCoverage}%</p>
+              <p style={STAT_LABEL}>Страници със schema</p>
+            </div>
+          </div>
+          <p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 16px 0 0">
+            GEO резултат на началната страница: {data.audit.geoScore}/100 · последен одит на {auditAt}
+            {data.audit.truncated ? ' · обхождането спря на тавана за плана' : ''}
+          </p>
+        </>
+      ) : (
+        <p style="font-size: 15px; line-height: 1.7; color: var(--color-neutral-700); margin: 0; border-top: 2px solid var(--color-text); padding-top: 20px">
+          Още няма одит. „Обходи сайта“ проверява страниците една по една и връща технически резултат,
+          покритие със schema и списък с проблеми.
+        </p>
+      )}
+    </section>
+
+    <section id="zadachi">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px">
+        <h2 style={H2}>Задачи за оптимизация</h2>
+        <a href="/chat/" style="font-size: 13.5px">Питай бота какво следва</a>
+      </div>
+      {data.tasks.length > 0 ? (
+        <div style="border-top: 2px solid var(--color-divider)" data-tasks>
+          {data.tasks.map((task, index) => (
+            <div
+              class="task-row"
+              data-task={task.id}
+              style={`display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px 24px; align-items: center; padding: 16px 0${index < data.tasks.length - 1 ? '; border-bottom: 1px solid var(--color-neutral-300)' : ''}`}
+            >
+              <div>
+                <p style="font-weight: 600; font-size: 15.5px; margin: 0 0 4px">{task.title}</p>
+                {task.detail && <p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 0">{task.detail}</p>}
+              </div>
+              <span class={task.priority === 'high' ? 'tag tag-accent' : 'tag tag-neutral'}>
+                {task.priority === 'high' ? 'Висок' : task.priority === 'low' ? 'Нисък' : 'Среден'}
+              </span>
+              <span style="font-size: 13.5px; color: var(--color-neutral-700); white-space: nowrap">
+                {task.impact > 0 ? `+${task.impact} видимост` : '—'}
+              </span>
+              <button type="button" class="btn btn-ghost" data-done={task.id} style="font-size: 13px">Готово</button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style="font-size: 15px; line-height: 1.7; color: var(--color-neutral-700); margin: 0; border-top: 2px solid var(--color-divider); padding-top: 20px">
+          Няма отворени задачи. Ботът ги създава сам, когато открие нещо конкретно за оправяне.
+        </p>
+      )}
+    </section>
+
+    <hr class="rule" />
+
+    <section id="modeli">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px">
+        <h2 style={H2}>Двигатели</h2>
+        <button type="button" class="btn btn-ghost" data-check-models style="font-size: 13.5px">Провери моделите</button>
+      </div>
+      <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 0 0 20px">
+        {data.configuredEngines} настроени двигателя. Тези с живо търсене мерят видимостта — те питат
+        интернет в момента на въпроса, както прави и клиентът ти. Тези без търсене отговарят от паметта си
+        и мерят друго: дали брандът изобщо е влязъл в данните за обучение.
+      </p>
+      <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 0 0 20px">
+        Всички модели, включително проприетарните, минават през binding-а на Workers AI — без чужди
+        ключове и без отделна услуга. Проверката казва не само кой отговаря, но и при кого търсенето
+        <em>наистина</em> е минало: поискано търсене, което не се е случило, изглежда като изправен
+        двигател, а мери друго.
+      </p>
+      <div data-models style="border-top: 2px solid var(--color-text); padding-top: 20px">
+        <p style="font-size: 14px; color: var(--color-neutral-700); margin: 0">
+          Натисни „Провери моделите“ — струва по едно кратко извикване на модел.
+        </p>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <section id="google">
+      <h2 style={H2}>Данни от Google</h2>
+      <p style="font-size: 15px; line-height: 1.7; max-width: 62ch; color: var(--color-neutral-800); margin: 12px 0 24px">
+        Search Console дава реалните позиции и заявки, Analytics — какво правят хората след клика.
+        Свързването е само за четене и може да се прекъсне по всяко време.
+      </p>
+      <div data-google style="border-top: 2px solid var(--color-text); padding-top: 20px">
+        <p style="font-size: 14px; color: var(--color-neutral-700); margin: 0">Проверявам връзката…</p>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <section id="istoria">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px">
+        <h2 style={H2}>История на чатове</h2>
+        <a href="/chat/" style="font-size: 13.5px">Отвори чата</a>
+      </div>
+      {data.chats.length > 0 ? (
+        <div class="split-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px">
+          {data.chats.map((chat) => (
+            <a href={`/chat/?id=${chat.id}`} style="color: var(--color-text); border-top: 2px solid var(--color-text); padding-top: 16px; display: block">
+              <p class="kicker" style="margin-bottom: 10px">{formatDay(chat.updated_utc)}</p>
+              <p style="font-weight: 600; font-size: 15.5px; margin: 0 0 6px">{chat.title}</p>
+              <p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 0">{messages(chat.messages)}</p>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p style="font-size: 15px; line-height: 1.7; color: var(--color-neutral-700); margin: 0">
+          Още няма разговори. <a href="/chat/">Отвори чата</a> и попитай нещо за сайта си.
+        </p>
+      )}
+    </section>
+  </div>
+</AppLayout>
+
+<script src="../scripts/dashboard.ts"></script>

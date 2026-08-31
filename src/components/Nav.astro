@@ -1,0 +1,21 @@
+---
+interface Props { current?: string }
+const { current } = Astro.props;
+
+const links = [
+  { href: '/#produkt', label: 'Продукт', id: 'produkt' },
+  { href: '/#kak', label: 'Как работи', id: 'kak' },
+  { href: '/ceni/', label: 'Цени', id: 'ceni' },
+  { href: '/tablo/', label: 'Табло', id: 'tablo' },
+  { href: '/chat/', label: 'Чат', id: 'chat' },
+];
+---
+
+<nav class="nav" style="padding-inline: clamp(20px, 5vw, 72px); position: sticky; top: 0; z-index: 20; background: var(--color-bg)">
+  <a class="nav-brand" href="/">SEO BOT</a>
+  {links.map((link) => (
+    <a href={link.href} aria-current={current === link.id ? 'page' : undefined}>{link.label}</a>
+  ))}
+  <a href="/vhod/" style="margin-left: auto">Вход</a>
+  <a class="btn btn-primary" href="/vhod/?view=register" style="color: var(--color-bg)">Започни безплатно</a>
+</nav>

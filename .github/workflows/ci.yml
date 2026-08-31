@@ -1,0 +1,44 @@
+# Пуска се при всяко бутане и при всяко PR — само проверява, че проектът се
+# компилира и че типовете са наред.
+#
+# НЕ публикува. Публикуването го прави самият Cloudflare: Workers Builds следи
+# хранилището и строи от изходния код. Втори път към същата услуга — деплой и
+# оттук, и оттам — рано или късно качва две различни версии една върху друга.
+# Затова остава един път, а тук стои проверката, която пази PR-ите.
+name: Build & type-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Версията идва от `.node-version` — същия файл, който чете и
+      # Cloudflare Workers Builds. Разминат ли се, тази проверка тества нещо
+      # различно от това, което се качва.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
