@@ -241,6 +241,9 @@ interface GoogleStatus {
   email?: string;
   sites?: { siteUrl: string; permissionLevel: string }[];
   properties?: { name: string; displayName: string }[];
+  scopes?: string[];
+  needsReconnect?: boolean;
+  missingScopes?: string[];
 }
 
 const googleBox = document.querySelector<HTMLElement>('[data-google]');
@@ -279,7 +282,18 @@ async function renderGoogle(): Promise<void> {
   const sites = status.sites ?? [];
   const properties = status.properties ?? [];
 
+  /*
+   * Липсващ обхват е тихият провал: връзката изглежда наред, а новата функция
+   * не работи, защото токенът е издаден преди тя да съществува.
+   */
+  const reconnect = status.needsReconnect
+    ? `<p class="notice" style="margin: 0 0 16px">Връзката е отпреди последната промяна в правата и не покрива всичко нужно
+         (${(status.missingScopes ?? []).map((s) => escapeHtml(s.split('/').pop() ?? s)).join(', ')}).
+         Свържи Google наново, за да заработи.</p>`
+    : '';
+
   googleBox.innerHTML = `
+    ${reconnect}
     <p style="font-size: 14px; margin: 0 0 20px">Свързан акаунт: <strong>${escapeHtml(status.email ?? '')}</strong></p>
     <div class="split-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; max-width: 760px">
       <div class="field">
@@ -289,20 +303,21 @@ async function renderGoogle(): Promise<void> {
           ${sites.map((site) => `<option value="${escapeHtml(site.siteUrl)}">${escapeHtml(site.siteUrl)}</option>`).join('')}
         </select>
       </div>
+      ${properties.length === 0 ? '' : `
       <div class="field">
         <label for="ga4-property">Имот в Analytics 4</label>
         <select class="input" id="ga4-property">
           <option value="">— избери —</option>
           ${properties.map((p) => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.displayName)}</option>`).join('')}
         </select>
-      </div>
+      </div>`}
     </div>
     <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px">
       <button type="button" class="btn btn-primary" id="save-google" style="color: var(--color-bg)">Запази избора</button>
       <button type="button" class="btn btn-ghost" id="disconnect-google">Прекъсни връзката</button>
     </div>
-    ${sites.length === 0 && properties.length === 0
-      ? '<p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 16px 0 0">Този акаунт няма достъп до имоти. Влез с акаунта, който управлява сайта.</p>'
+    ${sites.length === 0
+      ? '<p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 16px 0 0">Този акаунт няма достъп до имоти в Search Console. Влез с акаунта, който управлява сайта.</p>'
       : ''}
   `;
 

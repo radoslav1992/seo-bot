@@ -174,6 +174,23 @@ export async function googleAccountEmail(db: D1Database, userId: string): Promis
   return row?.email ?? null;
 }
 
+/**
+ * С какви обхвати е издаден токенът на този потребител.
+ *
+ * Refresh токенът носи обхватите от момента на съгласието и те НЕ се менят
+ * после. Добавен по-късно обхват (например Analytics при надграждане на план)
+ * не важи за вече свързаните акаунти — те трябва да свържат наново. Затова
+ * записаното тук е единственият начин да се разбере кой има нужда от това,
+ * без да се чака заявка да се провали.
+ */
+export async function googleAccountScopes(db: D1Database, userId: string): Promise<string[]> {
+  const row = await db
+    .prepare('SELECT scopes FROM google_accounts WHERE user_id = ?')
+    .bind(userId)
+    .first<{ scopes: string }>();
+  return row?.scopes ? row.scopes.split(' ').filter(Boolean) : [];
+}
+
 export async function disconnectGoogle(db: D1Database, userId: string): Promise<void> {
   await db.prepare('DELETE FROM google_accounts WHERE user_id = ?').bind(userId).run();
 }
