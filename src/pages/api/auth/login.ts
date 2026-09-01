@@ -1,13 +1,14 @@
 import type { APIRoute } from 'astro';
 import { isMissingSchema, loginUser, MISSING_SCHEMA_MESSAGE } from '../../../lib/db';
-import { readJson } from '../../../lib/guard';
+import { missingConfig, notConfigured, readJson } from '../../../lib/guard';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = locals.runtime?.env;
-  if (!env?.DB || !env.SESSION_SECRET) {
-    return Response.json({ ok: false, error: 'Входът не е настроен на този сървър.' }, { status: 503 });
+  const missing = missingConfig(env);
+  if (missing.length > 0 || !env?.DB || !env.SESSION_SECRET) {
+    return Response.json({ ok: false, error: notConfigured(missing) }, { status: 503 });
   }
 
   const body = await readJson<{ email?: unknown; password?: unknown }>(request);

@@ -17,14 +17,32 @@ export interface AppContext {
 
 export type GuardResult = { ok: true; context: AppContext } | { ok: false; response: Response };
 
-const NOT_CONFIGURED = 'Приложението не е настроено: липсва връзка с базата или SESSION_SECRET.';
+/**
+ * Кои от задължителните настройки липсват.
+ *
+ * Двете се бъркат лесно и се оправят на различни места: binding-ът идва от
+ * `wrangler.jsonc` и иска нов деплой, а секретът се задава в таблото и важи
+ * веднага. Отговор, който казва само „не е настроено“, праща човека да гадае
+ * между двете — затова тук се изброяват поименно.
+ */
+export function missingConfig(env: Env | undefined): string[] {
+  const missing: string[] = [];
+  if (!env?.DB) missing.push('базата D1 (binding „DB“ — идва от wrangler.jsonc, иска деплой)');
+  if (!env?.SESSION_SECRET) missing.push('SESSION_SECRET (Settings → Variables and Secrets)');
+  return missing;
+}
+
+export function notConfigured(missing: string[]): string {
+  return `Приложението не е настроено. Липсва: ${missing.join('; ')}.`;
+}
 
 export function guardApi(context: APIContext): GuardResult {
   const env = context.locals.runtime?.env;
-  if (!env?.DB || !env.SESSION_SECRET) {
+  const missing = missingConfig(env);
+  if (missing.length > 0 || !env?.DB || !env.SESSION_SECRET) {
     return {
       ok: false,
-      response: Response.json({ ok: false, error: NOT_CONFIGURED }, { status: 503 }),
+      response: Response.json({ ok: false, error: notConfigured(missing) }, { status: 503 }),
     };
   }
   const user = context.locals.user;

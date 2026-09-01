@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { addDomain, isMissingSchema, MISSING_SCHEMA_MESSAGE, registerUser } from '../../../lib/db';
 import { isEmail, normalizeEmail, passwordProblem } from '../../../lib/auth';
-import { readJson } from '../../../lib/guard';
+import { missingConfig, notConfigured, readJson } from '../../../lib/guard';
 
 export const prerender = false;
 
@@ -14,8 +14,9 @@ interface Body {
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = locals.runtime?.env;
-  if (!env?.DB || !env.SESSION_SECRET) {
-    return Response.json({ ok: false, error: 'Регистрацията не е настроена на този сървър.' }, { status: 503 });
+  const missing = missingConfig(env);
+  if (missing.length > 0 || !env?.DB || !env.SESSION_SECRET) {
+    return Response.json({ ok: false, error: notConfigured(missing) }, { status: 503 });
   }
 
   const body = await readJson<Body>(request);
