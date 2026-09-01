@@ -246,6 +246,13 @@ interface GoogleStatus {
   missingScopes?: string[];
 }
 
+interface DomainRow {
+  id: string;
+  domain: string;
+  gscSite?: string | null;
+  ga4Property?: string | null;
+}
+
 const googleBox = document.querySelector<HTMLElement>('[data-google]');
 
 async function renderGoogle(): Promise<void> {
@@ -283,6 +290,27 @@ async function renderGoogle(): Promise<void> {
   const properties = status.properties ?? [];
 
   /*
+   * Имотът се закача за КОНКРЕТЕН домейн, не за акаунта: един акаунт в Google
+   * покрива десет сайта и всеки има свой имот. Затова тук се избира за кой.
+   */
+  let domains: DomainRow[] = [];
+  try {
+    const res = await fetch('/api/domains');
+    domains = ((await res.json()) as { domains?: DomainRow[] }).domains ?? [];
+  } catch {
+    domains = [];
+  }
+
+  if (domains.length === 0) {
+    googleBox.innerHTML =
+      `<p style="font-size: 14px; margin: 0 0 16px">Свързан акаунт: <strong>${escapeHtml(status.email ?? '')}</strong></p>` +
+      '<p class="notice" style="margin: 0">Първо добави домейн — имотът в Search Console се закача за домейн, не за акаунта.</p>';
+    return;
+  }
+
+  const selected = domains.find((d) => d.gscSite) ?? domains[0];
+
+  /*
    * Липсващ обхват е тихият провал: връзката изглежда наред, а новата функция
    * не работи, защото токенът е издаден преди тя да съществува.
    */
@@ -295,12 +323,31 @@ async function renderGoogle(): Promise<void> {
   googleBox.innerHTML = `
     ${reconnect}
     <p style="font-size: 14px; margin: 0 0 20px">Свързан акаунт: <strong>${escapeHtml(status.email ?? '')}</strong></p>
+    ${domains.length < 2 ? '' : `
+    <div class="field" style="max-width: 368px; margin-bottom: 24px">
+      <label for="gsc-domain">Домейн</label>
+      <select class="input" id="gsc-domain">
+        ${domains
+          .map(
+            (d) =>
+              `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? ' selected' : ''}>` +
+              `${escapeHtml(d.domain)}${d.gscSite ? ' — свързан' : ''}</option>`,
+          )
+          .join('')}
+      </select>
+    </div>`}
     <div class="split-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; max-width: 760px">
       <div class="field">
         <label for="gsc-site">Имот в Search Console</label>
         <select class="input" id="gsc-site">
           <option value="">— избери —</option>
-          ${sites.map((site) => `<option value="${escapeHtml(site.siteUrl)}">${escapeHtml(site.siteUrl)}</option>`).join('')}
+          ${sites
+            .map(
+              (site) =>
+                `<option value="${escapeHtml(site.siteUrl)}"${site.siteUrl === selected.gscSite ? ' selected' : ''}>` +
+                `${escapeHtml(site.siteUrl)}</option>`,
+            )
+            .join('')}
         </select>
       </div>
       ${properties.length === 0 ? '' : `
@@ -308,7 +355,13 @@ async function renderGoogle(): Promise<void> {
         <label for="ga4-property">Имот в Analytics 4</label>
         <select class="input" id="ga4-property">
           <option value="">— избери —</option>
-          ${properties.map((p) => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.displayName)}</option>`).join('')}
+          ${properties
+            .map(
+              (p) =>
+                `<option value="${escapeHtml(p.name)}"${p.name === selected.ga4Property ? ' selected' : ''}>` +
+                `${escapeHtml(p.displayName)}</option>`,
+            )
+            .join('')}
         </select>
       </div>`}
     </div>
@@ -321,16 +374,32 @@ async function renderGoogle(): Promise<void> {
       : ''}
   `;
 
-  document.getElementById('save-google')?.addEventListener('click', async () => {
-    const domains = await fetch('/api/domains').then((res) => res.json() as Promise<{ domains?: { id: string }[] }>);
-    const domainId = domains.domains?.[0]?.id;
-    if (!domainId) { say('Първо добави домейн.'); return; }
+  const domainPicker = document.getElementById('gsc-domain') as HTMLSelectElement | null;
+  const sitePicker = document.getElementById('gsc-site') as HTMLSelectElement | null;
+  const propertyPicker = document.getElementById('ga4-property') as HTMLSelectElement | null;
 
+  // Смяната на домейн показва неговия избор, а не този на предишния — иначе
+  // изглежда, че вторият домейн вече е свързан с имота на първия.
+  domainPicker?.addEventListener('change', () => {
+    const domain = domains.find((d) => d.id === domainPicker.value);
+    if (sitePicker) sitePicker.value = domain?.gscSite ?? '';
+    if (propertyPicker) propertyPicker.value = domain?.ga4Property ?? '';
+  });
+
+  document.getElementById('save-google')?.addEventListener('click', async () => {
+    const domainId = domainPicker?.value || selected.id;
     const data = await post<{ ok?: boolean; error?: string }>('/api/domains', {
       domainId,
-      gscSite: (document.getElementById('gsc-site') as HTMLSelectElement | null)?.value ?? '',
-      ga4Property: (document.getElementById('ga4-property') as HTMLSelectElement | null)?.value ?? '',
+      gscSite: sitePicker?.value ?? '',
+      ga4Property: propertyPicker?.value ?? '',
     });
+    if (data?.ok) {
+      const domain = domains.find((d) => d.id === domainId);
+      if (domain) {
+        domain.gscSite = sitePicker?.value || domain.gscSite;
+        domain.ga4Property = propertyPicker?.value || domain.ga4Property;
+      }
+    }
     say(data?.ok ? 'Записано. Ботът вече чете реалните данни.' : (data?.error ?? 'Записът не успя.'), Boolean(data?.ok));
   });
 
