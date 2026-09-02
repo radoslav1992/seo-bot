@@ -36,6 +36,32 @@ export function notConfigured(missing: string[]): string {
   return `Приложението не е настроено. Липсва: ${missing.join('; ')}.`;
 }
 
+/**
+ * Отговор при неочаквана грешка.
+ *
+ * Без него Worker-ът връща HTML страница за 500, `res.json()` в браузъра
+ * гърми и потребителят вижда „няма връзка със сървъра“ — най-подвеждащото
+ * възможно съобщение, защото връзка има, сървърът е отговорил.
+ *
+ * Подробността се дава само при `DEBUG_ERRORS=1`. Иначе върви в дневника на
+ * Worker-а, а потребителят получава нещо, което не издава вътрешности.
+ */
+export function serverError(error: unknown, env: Env | undefined): Response {
+  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  console.error('Неочаквана грешка:', detail, error instanceof Error ? error.stack : '');
+
+  const verbose = env?.DEBUG_ERRORS === '1' || env?.DEBUG_ERRORS === 'true';
+  return Response.json(
+    {
+      ok: false,
+      error: verbose
+        ? `Сървърна грешка: ${detail}`
+        : 'Сървърна грешка. Опитай пак след малко; ако се повтаря, виж дневника на Worker-а.',
+    },
+    { status: 500 },
+  );
+}
+
 export function guardApi(context: APIContext): GuardResult {
   const env = context.locals.runtime?.env;
   const missing = missingConfig(env);

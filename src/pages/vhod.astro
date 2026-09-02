@@ -190,6 +190,9 @@ const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(
         errorBox.scrollIntoView({ block: 'nearest' });
       }
 
+      interface AuthReply { ok?: boolean; error?: string; redirect?: string }
+
+
       async function submit(form: HTMLFormElement, url: string, body: Record<string, unknown>) {
         const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
         const label = button?.textContent ?? '';
@@ -200,8 +203,17 @@ const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
           });
-          const data = (await res.json()) as { ok?: boolean; error?: string; redirect?: string };
-          if (!res.ok || !data.ok) { fail(data.error ?? 'Нещо се обърка. Опитай отново.'); return false; }
+          // Отговор, който не е JSON, значи гърмяла страница за грешка. Той
+          // е дошъл по мрежата, тоест „няма връзка“ би било лъжа — а точно
+          // това съобщение праща човека да проверява интернета си.
+          let data: AuthReply | null = null;
+          try {
+            data = (await res.json()) as AuthReply;
+          } catch {
+            fail(`Сървърът върна грешка (${res.status}). Виж дневника на Worker-а в Cloudflare.`);
+            return false;
+          }
+          if (!res.ok || !data?.ok) { fail(data?.error ?? 'Нещо се обърка. Опитай отново.'); return false; }
           if (data.redirect) location.href = data.redirect;
           return true;
         } catch {
