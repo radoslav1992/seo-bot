@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { isMissingSchema, loginUser, MISSING_SCHEMA_MESSAGE } from '../../../lib/db';
-import { missingConfig, notConfigured, readJson } from '../../../lib/guard';
+import { missingConfig, notConfigured, readJson, serverError } from '../../../lib/guard';
 
 export const prerender = false;
 
@@ -23,7 +23,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (isMissingSchema(error)) {
       return Response.json({ ok: false, error: MISSING_SCHEMA_MESSAGE }, { status: 503 });
     }
-    throw error;
+    return serverError(error, env);
   }
   if (!result.ok) return Response.json({ ok: false, error: result.error }, { status: 401 });
 

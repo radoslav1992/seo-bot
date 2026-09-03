@@ -11,11 +11,23 @@ const COOKIE = 'sb_session';
 /** Тридесет дни — колкото „Запомни ме“ в дизайна обещава. */
 const TTL_SECONDS = 30 * 24 * 60 * 60;
 /**
- * Итерациите се пазят В хеша, не тук. Така броят може да се вдигне утре, без
- * вчерашните пароли да станат неразпознаваеми — проверката чете своя брой от
- * записа, а не от кода.
+ * Таванът на платформата, не наш избор.
+ *
+ * Workers отказва PBKDF2 над 100 000 итерации — заради DoS — и хвърля
+ * `NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+ * supported`. Локалният dev не налага тавана, тоест 210 000 минава при теб и
+ * пада чак на живо, при първата регистрация.
+ *
+ * OWASP иска повече за SHA-256. Тук не може да се даде повече, затова
+ * тежестта се компенсира другаде: дълга парола (най-малко 10 знака) и сесия в
+ * базата, която се отнема с DELETE.
+ *
+ * Итерациите се пазят В хеша, не тук. Така броят може да се вдигне в деня, в
+ * който Workers вдигне тавана, без вчерашните пароли да станат неразпознаваеми
+ * — проверката чете своя брой от записа, а не от кода.
  */
-const PBKDF2_ITERATIONS = 210_000;
+const PBKDF2_MAX_ITERATIONS = 100_000;
+const PBKDF2_ITERATIONS = PBKDF2_MAX_ITERATIONS;
 
 export interface SessionUser {
   id: string;
@@ -86,6 +98,10 @@ export async function verifyPassword(password: string, stored: string): Promise<
   if (scheme !== 'pbkdf2' || !iterationsRaw || !saltRaw || !hashRaw) return false;
   const iterations = Number(iterationsRaw);
   if (!Number.isFinite(iterations) || iterations < 1000) return false;
+  // Хеш, направен преди тавана да е известен, не може да се провери тук:
+  // `deriveBits` би хвърлил, а хвърлена грешка при вход значи 500 вместо
+  // „грешна парола“. По-честно е да откаже и човекът да смени паролата си.
+  if (iterations > PBKDF2_MAX_ITERATIONS) return false;
   const hash = await pbkdf2(password, fromBase64(saltRaw), iterations);
   return safeEqual(toBase64(hash), hashRaw);
 }
