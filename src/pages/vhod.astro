@@ -8,6 +8,7 @@
  * проверката е в скрипта и е удобство, а не защита — защитата е в /tablo/.
  */
 import '../styles/global.css';
+import { SITE } from '../data/site.mjs';
 
 const TAB = 'background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; padding: 0 0 12px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--color-neutral-600)';
 const TAB_ON = 'background: none; border: 0; border-bottom: 2px solid var(--color-accent); margin-bottom: -2px; padding: 0 0 12px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--color-text)';
@@ -44,18 +45,14 @@ const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(
             <p style={LEAD}>Влез, за да видиш днешната проверка на видимостта.</p>
             <form data-form="login" style="display: grid; gap: 20px">
               <div class="field">
-                <label for="login-email">Служебен имейл</label>
+                <label for="login-email">Имейл</label>
                 <input class="input" id="login-email" name="email" type="email" placeholder="ime@firma.bg" autocomplete="email" required />
               </div>
               <div class="field">
                 <label for="login-pass">Парола</label>
                 <input class="input" id="login-pass" name="password" type="password" placeholder="Поне 10 символа" autocomplete="current-password" required />
               </div>
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
-                <label style="display: flex; align-items: center; gap: 10px; font-size: 14.5px">
-                  <input type="checkbox" checked style="width: 16px; height: 16px; accent-color: var(--color-accent)" />
-                  Запомни ме
-                </label>
+              <div style="display: flex; justify-content: flex-end">
                 <button type="button" data-go="forgot" style="background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 14.5px; color: var(--color-accent-700)">
                   Забравена парола
                 </button>
@@ -73,14 +70,14 @@ const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(
           <!-- ── Регистрация ──────────────────────────────────────── -->
           <div data-view="register" hidden>
             <h1 style={H1}>Създай акаунт</h1>
-            <p style={LEAD}>Три проверки на видимост са безплатни. Без карта, без обаждане от търговец.</p>
+            <p style={LEAD}>Получаваш 50 стартови кредита. Без карта и без автоматично таксуване.</p>
             <form data-form="register" style="display: grid; gap: 20px">
               <div class="field">
                 <label for="reg-name">Име и фамилия</label>
-                <input class="input" id="reg-name" name="name" type="text" placeholder="Мартин Дачев" autocomplete="name" required />
+                <input class="input" id="reg-name" name="name" type="text" placeholder="Име и фамилия" autocomplete="name" required />
               </div>
               <div class="field">
-                <label for="reg-email">Служебен имейл</label>
+                <label for="reg-email">Имейл</label>
                 <input class="input" id="reg-email" name="email" type="email" placeholder="ime@firma.bg" autocomplete="email" required />
               </div>
               <div class="field">
@@ -109,27 +106,12 @@ const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(
           <!-- ── Забравена парола ─────────────────────────────────── -->
           <div data-view="forgot" hidden>
             <h1 style={H1}>Забравена парола</h1>
-            <p style={LEAD}>Въведи имейла на акаунта. Изпращаме връзка за нова парола, валидна 60 минути.</p>
-            <form data-form="forgot" style="display: grid; gap: 20px">
-              <div class="field">
-                <label for="fp-email">Имейл</label>
-                <input class="input" id="fp-email" name="email" type="email" placeholder="ime@firma.bg" autocomplete="email" required />
-              </div>
-              <button type="submit" class="btn btn-primary btn-block" style="color: var(--color-bg)">Изпрати връзка</button>
-              <button type="button" class="btn btn-ghost btn-block" data-go="login">Обратно към вход</button>
-            </form>
-          </div>
-
-          <!-- ── Изпратено ────────────────────────────────────────── -->
-          <div data-view="sent" hidden>
-            <span class="tag tag-accent" style="margin-bottom: 24px; display: inline-block">Изпратено</span>
-            <h1 style={H1}>Провери пощата си</h1>
             <p style={LEAD}>
-              Ако има акаунт с този имейл, изпратихме връзка за смяна на паролата. Ако не пристигне до пет
-              минути, провери папка „Спам“ или опитай отново.
+              Автоматичното възстановяване още не е включено в бета версията. Пиши ни от имейла на акаунта и
+              ще ти помогнем след проверка на самоличността.
             </p>
             <div style="display: grid; gap: 12px">
-              <button type="button" class="btn btn-ghost btn-block" data-go="forgot">Изпрати отново</button>
+              <a class="btn btn-primary btn-block" href={`mailto:${SITE.company.support}?subject=SEO%20Bot%20-%20нова%20парола`}>Пиши на {SITE.company.support}</a>
               <button type="button" class="btn btn-ghost btn-block" data-go="login">Обратно към вход</button>
             </div>
           </div>
@@ -150,11 +132,11 @@ const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(
             <span style="display: block">за твоя бранш.</span>
           </h2>
           <p style="font-size: 16px; line-height: 1.7; max-width: 34ch; margin: 0">
-            340+ български бранда следят видимостта си при нас. Първата проверка отнема 12 минути.
+            Измери AI видимостта, направи технически одит и превърни резултатите в конкретни задачи.
           </p>
         </div>
         <p style="font-size: 13.5px; line-height: 1.7; margin: 0">
-          Данни в ЕС · DPA при заявка · Без обучение на модели с твоето съдържание
+          Шифрован Google достъп · без рекламни бисквитки · отнемаеми сесии
         </p>
       </aside>
     </div>
@@ -246,12 +228,6 @@ const LEAD = 'font-size: 15.5px; line-height: 1.7; margin: 0 0 32px; color: var(
         });
       });
 
-      document.querySelector<HTMLFormElement>('[data-form="forgot"]')?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        // Един и същ изглед независимо дали акаунтът съществува — иначе
-        // формата става справочник кой има регистрация.
-        show('sent');
-      });
     </script>
   </body>
 </html>

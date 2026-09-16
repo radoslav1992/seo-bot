@@ -20,9 +20,9 @@ import {
 } from './auth';
 
 export const PLANS = {
-  free: { label: 'Free', credits: 50, domains: 1, competitors: 0, keywords: 10, crawlPages: 100 },
-  pro: { label: 'Pro', credits: 3000, domains: 1, competitors: 3, keywords: 500, crawlPages: 10_000 },
-  business: { label: 'Business', credits: 20_000, domains: 10, competitors: 10, keywords: 5000, crawlPages: 100_000 },
+  free: { label: 'Free', credits: 50, domains: 1, competitors: 0, keywords: 10, crawlPages: 50 },
+  pro: { label: 'Pro', credits: 3000, domains: 1, competitors: 3, keywords: 500, crawlPages: 50 },
+  business: { label: 'Business', credits: 20_000, domains: 10, competitors: 10, keywords: 5000, crawlPages: 50 },
 } as const;
 
 export type PlanId = keyof typeof PLANS;

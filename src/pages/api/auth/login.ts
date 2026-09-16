@@ -1,15 +1,19 @@
 import type { APIRoute } from 'astro';
+import { env } from 'cloudflare:workers';
 import { isMissingSchema, loginUser, MISSING_SCHEMA_MESSAGE } from '../../../lib/db';
 import { missingConfig, notConfigured, readJson, serverError } from '../../../lib/guard';
+import { consumeRateLimit, rateLimitResponse } from '../../../lib/rate-limit';
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  const env = locals.runtime?.env;
+export const POST: APIRoute = async ({ request }) => {
   const missing = missingConfig(env);
   if (missing.length > 0 || !env?.DB || !env.SESSION_SECRET) {
     return Response.json({ ok: false, error: notConfigured(missing) }, { status: 503 });
   }
+
+  const limited = await consumeRateLimit(env.DB, request, env.SESSION_SECRET, 'login', 10, 15 * 60 * 1000);
+  if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
 
   const body = await readJson<{ email?: unknown; password?: unknown }>(request);
   if (typeof body?.email !== 'string' || typeof body.password !== 'string') {

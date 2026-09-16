@@ -1,7 +1,9 @@
 import type { APIRoute } from 'astro';
+import { env } from 'cloudflare:workers';
 import { addDomain, isMissingSchema, MISSING_SCHEMA_MESSAGE, registerUser } from '../../../lib/db';
 import { isEmail, normalizeEmail, passwordProblem } from '../../../lib/auth';
 import { missingConfig, notConfigured, readJson, serverError } from '../../../lib/guard';
+import { consumeRateLimit, rateLimitResponse } from '../../../lib/rate-limit';
 
 export const prerender = false;
 
@@ -12,12 +14,14 @@ interface Body {
   domain?: unknown;
 }
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  const env = locals.runtime?.env;
+export const POST: APIRoute = async ({ request }) => {
   const missing = missingConfig(env);
   if (missing.length > 0 || !env?.DB || !env.SESSION_SECRET) {
     return Response.json({ ok: false, error: notConfigured(missing) }, { status: 503 });
   }
+
+  const limited = await consumeRateLimit(env.DB, request, env.SESSION_SECRET, 'register', 5, 60 * 60 * 1000);
+  if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
 
   const body = await readJson<Body>(request);
   if (!body) return Response.json({ ok: false, error: 'Невалидно запитване.' }, { status: 400 });

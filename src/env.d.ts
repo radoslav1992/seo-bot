@@ -85,10 +85,12 @@ interface Env {
   VISIBILITY_ENGINES?: string;
 }
 
-type Runtime = import('@astrojs/cloudflare').Runtime<Env>;
+declare module 'cloudflare:workers' {
+  export const env: Env;
+}
 
 declare namespace App {
-  interface Locals extends Runtime {
+  interface Locals {
     /** Влезлият потребител, ако има. Попълва се от `src/middleware.ts`. */
     user?: import('./lib/auth').SessionUser | null;
   }

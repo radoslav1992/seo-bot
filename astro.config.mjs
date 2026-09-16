@@ -14,15 +14,21 @@ import { SITE } from './src/data/site.mjs';
 export default defineConfig({
   site: SITE.url,
   output: 'static',
+  // Authentication sessions live in D1; the built-in Astro KV session store
+  // would be an unused second source of truth.
+  session: false,
   adapter: cloudflare({
     imageService: 'compile',
-    platformProxy: { enabled: true },
+    // Avoid port discovery in restricted CI containers; the inspector is
+    // only used by the local workerd process during prerendering.
+    inspectorPort: 9230,
+    remoteBindings: false,
   }),
   integrations: [
     sitemap({
       // Таблото и чатът искат вход — покана към търсачките към тях е шум,
       // а не трафик.
-      filter: (page) => !/\/(tablo|chat|vhod)\/?$/.test(page),
+      filter: (page) => !/\/(tablo|chat|vhod|404)\/?$/.test(page),
     }),
   ],
   build: { format: 'directory' },
