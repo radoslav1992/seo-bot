@@ -11,11 +11,21 @@ const links = [
 ];
 ---
 
-<nav class="nav" style="padding-inline: clamp(20px, 5vw, 72px); position: sticky; top: 0; z-index: 20; background: var(--color-bg)">
+<nav class="nav" aria-label="Основна навигация">
   <a class="nav-brand" href="/">SEO BOT</a>
-  {links.map((link) => (
-    <a href={link.href} aria-current={current === link.id ? 'page' : undefined}>{link.label}</a>
-  ))}
-  <a href="/vhod/" style="margin-left: auto">Вход</a>
-  <a class="btn btn-primary" href="/vhod/?view=register" style="color: var(--color-bg)">Започни безплатно</a>
+  <div class="nav-links">
+    {links.map((link) => (
+      <a href={link.href} aria-current={current === link.id ? 'page' : undefined}>{link.label}</a>
+    ))}
+    <a href="/vhod/">Вход</a>
+    <a class="btn btn-primary" href="/vhod/?view=register">Започни безплатно</a>
+  </div>
+  <details class="nav-mobile">
+    <summary>Меню</summary>
+    <div>
+      {links.map((link) => <a href={link.href}>{link.label}</a>)}
+      <a href="/vhod/">Вход</a>
+      <a class="btn btn-primary" href="/vhod/?view=register">Започни безплатно</a>
+    </div>
+  </details>
 </nav>

@@ -1,7 +1,7 @@
 ---
 /** Подвалът на публичните страници — четирите колони от дизайна. */
 import { SITE } from '../data/site.mjs';
-const year = 2026;
+const year = new Date().getFullYear();
 ---
 
 <div class="shell">
@@ -25,9 +25,10 @@ const year = 2026;
       <a href="/pravno/#refund">Възстановяване</a>
       <a href="/pravno/#dpa">Обработка на данни</a>
       <a href="/pravno/#contact">Контакти</a>
+      <a href={`mailto:${SITE.company.support}`}>{SITE.company.support}</a>
     </div>
   </footer>
   <p style="border-top: 2px solid var(--color-divider); padding: 20px 0 40px; margin: 0; font-size: 13.5px; color: var(--color-neutral-700)">
-    © {year} {SITE.company.legalName} · ЕИК {SITE.company.eik}
+    © {year} SEO Bot by {SITE.company.legalName} · ЕИК {SITE.company.eik}
   </p>
 </div>

@@ -1,176 +1,109 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE } from '../data/site.mjs';
 
-const stats = [
-  { value: '58%', label: 'от търсенията завършват без клик към сайт' },
-  { value: '4', label: 'AI двигателя под наблюдение денонощно' },
-  { value: '12 мин', label: 'от регистрация до първи GEO отчет' },
-  { value: '340+', label: 'български бранда следят видимостта си при нас' },
+const metrics = [
+  { value: '18', label: 'специализирани SEO и GEO инструмента' },
+  { value: '3', label: 'AI двигателя в началната конфигурация' },
+  { value: '50', label: 'URL адреса в един подробен обход' },
+  { value: 'GSC + GA4', label: 'реални данни от Google по избор' },
 ];
 
 const features = [
-  {
-    n: '01',
-    title: 'Видимост в AI отговори',
-    body: 'Задаваме реални въпроси на AI двигателите и записваме дали брандът ти е споменат, как е описан и с какъв източник е подкрепен.',
-  },
-  {
-    n: '02',
-    title: 'Съдържание, което AI цитира',
-    body: 'Пишеш в чата „статия за избор на матрак“ и получаваш структура, текст, FAQ и schema разметка, оптимизирани както за Google, така и за генеративните двигатели.',
-  },
-  {
-    n: '03',
-    title: 'Технически одит на сайта',
-    body: 'Обхождане на адресите: скорост, индексиране, структурирани данни, вътрешни връзки, llms.txt и достъп за AI ботовете. Всеки проблем идва с готово решение.',
-  },
-  {
-    n: '04',
-    title: 'Позиции и ключови думи',
-    body: 'Реални позиции от Google Search Console, а не оценки — плюс новия слой: кои заявки водят до споменаване в AI отговор.',
-  },
-  {
-    n: '05',
-    title: 'Анализ на конкуренти',
-    body: 'Виждаш кой заема мястото ти в отговорите, кои страници го изнасят там и какво точно ти липсва, за да го изместиш.',
-  },
-  {
-    n: '06',
-    title: 'Задачи с приоритет',
-    body: 'Ботът превръща данните в подреден списък със задачи: какво да направиш днес, колко видимост ще спечелиш и колко време ще отнеме.',
-  },
+  ['AI видимост, измерена с реални въпроси', 'SEO Bot задава заявки на настроените AI двигатели, пази отговорите и показва дали брандът ти е споменат, на коя позиция и до кои конкуренти.'],
+  ['Одит, който стига до конкретно решение', 'Проверява индексиране, заглавия, schema.org, вътрешни връзки, llms.txt, достъп за AI ботове и технически сигнали. Всеки проблем идва със следваща стъпка.'],
+  ['Search Console и Analytics в същия разговор', 'Свързваш Google по избор и ботът работи с реални позиции, кликове, страници и трафик — без да копираш таблици между инструменти.'],
+  ['Съдържание и технически файлове', 'Генерира задания, структури, FAQ, валидна schema.org разметка и llms.txt. Кодът сглобява структурата; моделът пише само текста.'],
+  ['Конкуренти от самите отговори', 'Виждаш кои домейни AI препоръчва вместо твоя и сравняваш съдържанието, структурата и техническите им сигнали със своите.'],
+  ['Подреден списък за работа', 'Резултатите се превръщат в задачи с приоритет, очакван ефект и история. Не още едно табло, което трябва сам да разгадаваш.'],
 ];
 
 const steps = [
-  {
-    title: '1. Свързваш домейна',
-    body: 'Въвеждаш адреса и до три конкурента. Ботът обхожда сайта и съставя списък от заявки, по които те търсят реални хора.',
-  },
-  {
-    title: '2. Мерим видимостта',
-    body: 'Задаваме тези заявки на AI двигателите и записваме отговорите, източниците и тона.',
-  },
-  {
-    title: '3. Работиш по списъка',
-    body: 'Пишеш на бота какво ти трябва, той генерира текста и разметката, ти публикуваш. Следващата проверка показва разликата.',
-  },
+  ['Добавяш домейн', 'Регистрацията е без карта. Въвеждаш сайт, който управляваш, и избираш дали да свържеш Google.'],
+  ['Пускаш първата проверка', 'Ботът обхожда сайта, съставя подходящи въпроси и проверява настроените AI двигатели.'],
+  ['Работиш по приоритетите', 'Получаваш обяснение, задачи и готови материали. Следващата проверка показва какво се е променило.'],
 ];
 
-const plans = [
-  { kicker: 'Free', title: '0 лв.', body: '3 проверки на видимост месечно, 1 домейн, 10 ключови думи. За да видиш къде стоиш.', featured: false },
-  { kicker: 'Pro · най-избиран', title: '149 лв./мес.', body: 'Ежедневно следене на 4 двигателя, 500 ключови думи, чат без лимит, одит и задачи.', featured: true },
-  { kicker: 'Business', title: '449 лв./мес.', body: 'До 10 домейна, брандирани отчети, екипни права, API и приоритетна поддръжка.', featured: false },
-];
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: SITE.name,
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web',
+  url: SITE.url,
+  description: SITE.description,
+  inLanguage: 'bg',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'BGN', description: 'Публична бета версия' },
+};
 ---
 
-<BaseLayout>
+<BaseLayout schema={schema}>
   <div class="shell">
-    <section style="padding: 96px 0 72px">
-      <span class="kicker kicker-accent" style="margin-bottom: 24px">Generative Engine Optimization</span>
-      <h1 style="font-weight: 800; font-size: clamp(40px, 6vw, 82px); line-height: 1.06; letter-spacing: -0.02em; margin: 0 0 28px; margin-left: -0.058em">
-        <span style="display: block">Клиентите вече не търсят.</span>
-        <span style="display: block">Те питат AI.</span>
-      </h1>
-      <p style="font-size: 18px; line-height: 1.65; max-width: 56ch; margin: 0 0 32px">
-        SEO Bot проверява дали брандът ти се появява в отговорите на AI двигателите, показва къде губиш от
-        конкурентите и генерира съдържанието, което моделите цитират. Класическото SEO остава — просто вече
-        не е достатъчно.
-      </p>
-      <div style="display: flex; gap: 12px; flex-wrap: wrap">
-        <a class="btn btn-primary" href="/vhod/?view=register" style="color: var(--color-bg)">Провери бранда си безплатно</a>
-        <a class="btn btn-ghost" href="/ceni/">Виж цените</a>
+    <section class="hero-grid">
+      <div>
+        <span class="kicker kicker-accent">SEO + GEO за български бизнес</span>
+        <h1 class="hero-title">Разбери дали AI <em>препоръчва</em> твоя бизнес.</h1>
+        <p class="hero-lead">SEO Bot събира AI видимост, технически одит и реални данни от Google в един асистент. Получаваш не просто резултат, а ясен списък какво да подобриш първо.</p>
+        <div class="button-row" style="margin-top: 30px">
+          <a class="btn btn-primary" href="/vhod/?view=register">Направи първа проверка</a>
+          <a class="btn btn-secondary" href="#produkt">Разгледай продукта</a>
+        </div>
+        <p class="trust-line">50 стартови кредита · без карта · публична бета версия</p>
       </div>
-      <p style="font-size: 13px; line-height: 1.65; color: var(--color-neutral-700); margin: 20px 0 0">
-        Без карта. Първите 3 проверки са наши.
-      </p>
-    </section>
 
-    <hr class="rule" />
-
-    <section style="padding: 56px 0">
-      <div class="split-4" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px 32px">
-        {stats.map((stat) => (
-          <div>
-            <p class="num" style="font-weight: 800; font-size: clamp(32px, 3.4vw, 48px); line-height: 1.1; color: var(--color-accent); margin: 0 0 14px; margin-left: -0.045em">{stat.value}</p>
-            <p style="font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.35; color: var(--color-neutral-700); margin: 0">{stat.label}</p>
-          </div>
-        ))}
+      <div class="product-preview" aria-label="Примерен изглед на таблото">
+        <div class="preview-top"><strong>ВИДИМОСТ · ПРИМЕР</strong><span class="preview-live">● измерено с търсене</span></div>
+        <div class="preview-score"><strong>62</strong><p>Споменаване в 62% от проверените AI отговори за избраните заявки.</p></div>
+        <svg class="preview-chart" viewBox="0 0 520 118" role="img" aria-label="Примерна растяща динамика">
+          <g stroke="#45413d" stroke-width="1"><line x1="0" y1="18" x2="520" y2="18" /><line x1="0" y1="58" x2="520" y2="58" /><line x1="0" y1="98" x2="520" y2="98" /></g>
+          <path d="M0 91 C70 88, 72 72, 138 76 S224 46, 292 59 S382 28, 520 18" fill="none" stroke="#ff4f2e" stroke-width="4" /><circle cx="514" cy="19" r="6" fill="#ff4f2e" />
+        </svg>
+        <div class="preview-query"><span>„счетоводна къща за малък бизнес“</span><span>Споменат</span></div>
+        <div class="preview-query"><span>„добър счетоводител в София“</span><span>Позиция 2</span></div>
+        <div class="preview-query"><span>„онлайн счетоводни услуги“</span><span>Задача</span></div>
       </div>
     </section>
 
-    <hr class="rule" />
+    <section class="metric-grid" aria-label="Възможности на продукта">
+      {metrics.map((metric) => <div class="metric"><strong>{metric.value}</strong><span>{metric.label}</span></div>)}
+    </section>
 
-    <section id="produkt" style="padding: 72px 0 56px">
-      <span class="kicker kicker-accent" style="margin-bottom: 40px">Какво прави SEO Bot</span>
+    <section id="produkt" style="padding: 92px 0 64px">
+      <div class="section-heading">
+        <span class="kicker kicker-accent">Един работен поток</span>
+        <h2>От „вижда ли ме AI?“ до „какво правя днес?“</h2>
+        <p>Всеки резултат може да бъде проследен до одит, AI отговор или данни от Google. Ботът не измисля числа.</p>
+      </div>
       {features.map((feature, index) => (
-        <div
-          class="feature-row"
-          style={`display: grid; grid-template-columns: 120px minmax(0, 400px) minmax(0, 1fr); gap: 24px clamp(24px, 4vw, 72px); align-items: baseline; padding: 40px 0${index > 0 ? '; border-top: 2px solid var(--color-divider)' : ''}`}
-        >
-          <p class="num" style="font-weight: 800; font-size: 15px; margin: 0">{feature.n}</p>
-          <h2 style="font-weight: 800; font-size: 24px; line-height: 1.2; letter-spacing: -0.01em; margin: 0">{feature.title}</h2>
-          <p style="font-size: 15.5px; line-height: 1.7; margin: 0; max-width: 52ch; color: var(--color-neutral-800)">{feature.body}</p>
+        <div class="feature-row" style={`display: grid; grid-template-columns: 90px minmax(0, 390px) minmax(0, 1fr); gap: 24px clamp(24px, 4vw, 72px); align-items: baseline; padding: 34px 0${index > 0 ? '; border-top: 1px solid var(--color-divider)' : ''}`}>
+          <p class="num" style="font-weight: 800; font-size: 14px; margin: 0; color: var(--color-accent)">0{index + 1}</p>
+          <h3 style="font-size: 23px; margin: 0">{feature[0]}</h3>
+          <p style="font-size: 15.5px; line-height: 1.75; margin: 0; max-width: 58ch; color: var(--color-neutral-800)">{feature[1]}</p>
         </div>
       ))}
     </section>
 
-    <hr class="rule" />
-
-    <section id="kak" style="padding: 72px 0 56px">
-      <span class="kicker kicker-accent" style="margin-bottom: 40px">Как работи</span>
-      <div class="split-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px">
-        {steps.map((step) => (
-          <div style="border-top: 2px solid var(--color-text); padding-top: 20px">
-            <h3 style="font-weight: 800; font-size: 20px; line-height: 1.25; margin: 0 0 12px">{step.title}</h3>
-            <p style="font-size: 15px; line-height: 1.7; margin: 0; color: var(--color-neutral-800)">{step.body}</p>
-          </div>
-        ))}
+    <section id="kak" style="padding: 72px 0 84px">
+      <div class="section-heading"><span class="kicker kicker-accent">Как работи</span><h2>Първи полезен резултат в три стъпки.</h2></div>
+      <div class="split-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px">
+        {steps.map((step, index) => <div class="card"><span class="tag tag-accent" style="align-self: flex-start">0{index + 1}</span><h3 style="font-size: 21px; margin-top: 12px">{step[0]}</h3><p style="line-height: 1.7; color: var(--color-neutral-800)">{step[1]}</p></div>)}
       </div>
     </section>
 
-    <hr class="rule" />
-
-    <section style="padding: 64px 0 72px">
-      <figure style="margin: 0">
-        <blockquote style="font-weight: 800; font-size: clamp(24px, 2.6vw, 34px); line-height: 1.25; letter-spacing: -0.015em; max-width: 34ch; margin: 0">
-          „За три месеца минахме от нула споменавания до първи избор по „онлайн магазин за инструменти“.
-          Запитванията се удвоиха.“
-        </blockquote>
-        <figcaption style="font-size: 15.5px; line-height: 1.7; color: var(--color-neutral-700); margin: 40px 0 0">
-          — Мартин Дачев, маркетинг директор, Технобаза
-        </figcaption>
-      </figure>
+    <section style="padding: 0 0 92px">
+      <div class="principle-card split-2" style="display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 48px; align-items: center">
+        <div><span class="kicker" style="color: var(--color-accent)">Важната разлика</span><h2 style="font-size: clamp(30px, 4vw, 48px)">Видимост не е същото като познатост.</h2></div>
+        <p style="font-size: 17px; line-height: 1.75; margin: 0">SEO Bot отделя отговорите с потвърдено живо търсене от тези, които моделът дава по памет. Ако търсенето не е минало, резултатът не се представя като актуална видимост. Това пази решенията ти от красиво, но грешно число.</p>
+      </div>
     </section>
 
-    <hr class="rule" />
-
-    <section style="padding: 72px 0">
-      <span class="kicker kicker-accent" style="margin-bottom: 40px">Планове</span>
-      <div class="split-3" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px">
-        {plans.map((plan) => (
-          <div class={plan.featured ? 'card elev-md' : 'card'} style={plan.featured ? 'border: 2px solid var(--color-accent)' : undefined}>
-            <div class="card-kicker" style={plan.featured ? 'color: var(--color-accent-700)' : undefined}>{plan.kicker}</div>
-            <div class="card-title">{plan.title}</div>
-            <div class="card-body">{plan.body}</div>
-          </div>
-        ))}
-      </div>
-      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px">
-        <a class="btn btn-primary" href="/ceni/" style="color: var(--color-bg)">Пълно сравнение на плановете</a>
-      </div>
+    <section style="padding: 72px 0 92px; border-top: 1px solid var(--color-divider)">
+      <div class="section-heading"><span class="kicker kicker-accent">Публична бета</span><h2>Започни безплатно. Плащанията още не са активни.</h2><p>Получаваш 50 стартови кредита, един домейн, AI чат, проверки и одит. Pro и Business са публикувани като посока, но няма автоматично таксуване.</p></div>
+      <div class="button-row"><a class="btn btn-primary" href="/vhod/?view=register">Създай безплатен акаунт</a><a class="btn btn-secondary" href="/ceni/">Виж плановете</a></div>
     </section>
   </div>
 
   <section style="background: var(--color-accent); color: var(--color-bg)">
-    <div class="shell" style="padding-block: 84px">
-      <h3 style="font-weight: 800; font-size: clamp(32px, 4.2vw, 56px); line-height: 1.06; letter-spacing: -0.015em; margin: 0 0 40px; margin-left: -0.058em">
-        <span style="display: block">Днес някой пита AI за твоя бранш.</span>
-        <span style="display: block">Нека отговорът е ти.</span>
-      </h3>
-      <div style="display: flex; gap: 12px; flex-wrap: wrap">
-        <a class="btn btn-ghost" href="/vhod/?view=register" style="color: var(--color-bg); border-color: var(--color-bg)">Започни безплатно</a>
-        <a class="btn btn-ghost" href="/tablo/" style="color: var(--color-bg); border-color: var(--color-bg)">Виж таблото</a>
-      </div>
-    </div>
+    <div class="shell" style="padding-block: 82px"><h2 style="font-size: clamp(34px, 5vw, 62px); max-width: 18ch; letter-spacing: -.04em; margin-bottom: 32px">Следващият AI отговор може да препоръча теб.</h2><a class="btn" href="/vhod/?view=register" style="background: var(--color-text); color: var(--color-bg)">Провери бранда си</a></div>
   </section>
 </BaseLayout>

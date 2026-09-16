@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { env } from 'cloudflare:workers';
 import { clearCookieHeader } from '../../../lib/auth';
 import { destroySession } from '../../../lib/db';
 
@@ -10,8 +11,7 @@ export const prerender = false;
  * Изчистена бисквитка при жива сесия значи, че копие на стойността ѝ —
  * от лог, от разширение, от чужд браузър — още работи.
  */
-export const POST: APIRoute = async ({ request, locals, redirect }) => {
-  const env = locals.runtime?.env;
+export const POST: APIRoute = async ({ request, redirect }) => {
   if (env?.DB && env.SESSION_SECRET) {
     await destroySession(env.DB, env.SESSION_SECRET, request.headers.get('cookie')).catch(() => undefined);
   }

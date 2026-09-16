@@ -8,11 +8,11 @@
 export const prerender = false;
 
 import AppLayout from '../layouts/AppLayout.astro';
+import { env } from 'cloudflare:workers';
 import { formatDay, loadDashboard, normalizePeriod, polylinePoints } from '../lib/dashboard';
 import { days, messages, points as scorePoints, queries } from '../lib/bg';
 
 const user = Astro.locals.user;
-const env = Astro.locals.runtime?.env;
 
 if (!user || !env?.DB) return Astro.redirect('/vhod/', 303);
 
@@ -245,10 +245,17 @@ const auditAt = data.audit
         </p>
       )}
 
-      <form data-form="competitor" style="display: flex; gap: 12px; flex-wrap: wrap; max-width: 520px; margin-top: 24px">
-        <input class="input" name="competitor" type="text" placeholder="masterhaus.bg" required style="flex: 1; min-width: 200px" aria-label="Домейн на конкурент" />
-        <button type="submit" class="btn btn-ghost">Следи конкурент</button>
-      </form>
+      {user.plan === 'free' ? (
+        <p class="notice notice-ok" style="margin: 24px 0 0; max-width: 620px">
+          Следенето на избран конкурент е част от предварителния Pro план. В бета версията конкурентите,
+          открити в самите AI отговори, продължават да се показват автоматично.
+        </p>
+      ) : (
+        <form data-form="competitor" style="display: flex; gap: 12px; flex-wrap: wrap; max-width: 520px; margin-top: 24px">
+          <input class="input" name="competitor" type="text" placeholder="masterhaus.bg" required style="flex: 1; min-width: 200px" aria-label="Домейн на конкурент" />
+          <button type="submit" class="btn btn-ghost">Следи конкурент</button>
+        </form>
+      )}
       {data.competitors.length > 0 && (
         <p style="font-size: 13.5px; color: var(--color-neutral-700); margin: 12px 0 0">
           Следени: {data.competitors.join(', ')}

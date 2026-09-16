@@ -16,9 +16,10 @@ interface Props {
   /** Правните и приложните страници не искат покана от търсачките. */
   noindex?: boolean;
   current?: string;
+  schema?: Record<string, unknown> | Record<string, unknown>[];
 }
 
-const { title, description = SITE.description, noindex = false, current } = Astro.props;
+const { title, description = SITE.description, noindex = false, current, schema } = Astro.props;
 const pageTitle = title ? `${title} — ${SITE.name}` : `${SITE.name} — SEO и GEO видимост за български бизнес`;
 const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin);
 ---
@@ -40,6 +41,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin);
     <meta property="og:url" content={canonical.href} />
     <meta property="og:locale" content="bg_BG" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#ff4f2e" />
+    {schema && <script is:inline type="application/ld+json" set:html={JSON.stringify(schema)} />}
 
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

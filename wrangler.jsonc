@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "seo-bot",
-  "main": "./dist/_worker.js/index.js",
+  "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_date": "2025-11-01",
   "compatibility_flags": ["nodejs_compat"],
 
@@ -26,7 +26,8 @@
   // AI Gateway, без токен за Cloudflare API и без ключове на доставчиците —
   // името на модела избира доставчика и формата на тялото.
   "ai": {
-    "binding": "AI"
+    "binding": "AI",
+    "remote": true
   },
 
   // Данните: потребители, домейни, чатове, одити, задачи.

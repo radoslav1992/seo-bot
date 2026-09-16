@@ -7,6 +7,7 @@
  */
 
 import type { APIContext } from 'astro';
+import { env } from 'cloudflare:workers';
 import type { SessionUser } from './auth';
 
 export interface AppContext {
@@ -63,7 +64,6 @@ export function serverError(error: unknown, env: Env | undefined): Response {
 }
 
 export function guardApi(context: APIContext): GuardResult {
-  const env = context.locals.runtime?.env;
   const missing = missingConfig(env);
   if (missing.length > 0 || !env?.DB || !env.SESSION_SECRET) {
     return {

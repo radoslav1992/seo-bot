@@ -8,19 +8,20 @@
     "build": "astro build",
     "preview": "wrangler dev",
     "check": "astro check",
+    "release:check": "npm run check && npm run build && npm audit --omit=dev",
     "deploy:cf": "wrangler d1 migrations apply seo-bot --remote && wrangler deploy",
     "deploy": "npm run build && npm run deploy:cf",
     "db:migrate": "wrangler d1 migrations apply seo-bot --remote",
     "db:migrate:local": "wrangler d1 migrations apply seo-bot --local"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^12.6.0",
-    "@astrojs/sitemap": "^3.4.1",
-    "astro": "^5.12.0"
+    "@astrojs/cloudflare": "^14.3.1",
+    "@astrojs/sitemap": "^3.7.4",
+    "astro": "^7.3.3"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.9",
-    "typescript": "^5.8.3",
-    "wrangler": "^4.24.0"
+    "@astrojs/check": "^0.9.10",
+    "typescript": "^6.0.2",
+    "wrangler": "^4.132.0"
   }
 }

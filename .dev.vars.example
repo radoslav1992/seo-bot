@@ -1,0 +1,6 @@
+SESSION_SECRET=replace-with-a-long-random-value
+TOKEN_ENC_KEY=replace-with-a-different-long-random-value
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+PUBLIC_SITE_URL=http://localhost:4321
+DEBUG_ERRORS=1
